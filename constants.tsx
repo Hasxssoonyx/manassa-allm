@@ -1,0 +1,77 @@
+
+import React from 'react';
+import { 
+  CheckCircle2, 
+  Clock, 
+  Trash2, 
+  Bell, 
+  Monitor, 
+  MapPin, 
+  Ban, 
+  RefreshCw, 
+  Plus, 
+  Users, 
+  BookOpen, 
+  Calendar,
+  Settings,
+  LogOut,
+  ChevronLeft,
+  Search,
+  ClipboardList,
+  GraduationCap,
+  MessageSquare,
+  UserCheck,
+  UserX,
+  Stethoscope,
+  Star,
+  Moon,
+  Sun,
+  Camera,
+  User,
+  CheckSquare
+} from 'lucide-react';
+
+export const ICONS = {
+  Check: <CheckCircle2 size={18} />,
+  CheckSquare: <CheckSquare size={18} />,
+  Clock: <Clock size={14} />,
+  Trash: <Trash2 size={18} />,
+  Bell: <Bell size={20} />,
+  Monitor: <Monitor size={20} />,
+  MapPin: <MapPin size={14} />,
+  Ban: <Ban size={18} />,
+  Reset: <RefreshCw size={18} />,
+  Plus: <Plus size={20} />,
+  Users: <Users size={20} />,
+  BookOpen: <BookOpen size={20} />,
+  Calendar: <Calendar size={20} />,
+  Settings: <Settings size={20} />,
+  LogOut: <LogOut size={20} />,
+  ChevronLeft: <ChevronLeft size={20} />,
+  Search: <Search size={20} />,
+  Exams: <ClipboardList size={20} />,
+  // Added ClipboardList to ICONS to match usage in App.tsx (Line 416)
+  ClipboardList: <ClipboardList size={20} />,
+  Grades: <GraduationCap size={20} />,
+  // Added GraduationCap to ICONS to match usage in App.tsx (Line 148)
+  GraduationCap: <GraduationCap size={20} />,
+  Notes: <MessageSquare size={16} />,
+  Present: <UserCheck size={16} />,
+  Absent: <UserX size={16} />,
+  Excused: <Stethoscope size={16} />,
+  Star: <Star size={18} />,
+  Moon: <Moon size={20} />,
+  Sun: <Sun size={20} />,
+  Camera: <Camera size={18} />,
+  User: <User size={40} />
+};
+
+export const SUBJECT_COLORS: Record<string, { bg: string; text: string; border: string; icon: string }> = {
+  'كيمياء': { bg: 'bg-emerald-50', text: 'text-emerald-700', border: 'border-emerald-200', icon: 'text-emerald-500' },
+  'فيزياء': { bg: 'bg-indigo-50', text: 'text-indigo-700', border: 'border-indigo-200', icon: 'text-indigo-500' },
+  'أحياء': { bg: 'bg-rose-50', text: 'text-rose-700', border: 'border-rose-200', icon: 'text-rose-500' },
+  'اللغة العربية': { bg: 'bg-amber-50', text: 'text-amber-700', border: 'border-amber-200', icon: 'text-amber-500' },
+  'اللغة الانكليزية': { bg: 'bg-blue-50', text: 'text-blue-700', border: 'border-blue-200', icon: 'text-blue-500' },
+  'رياضيات': { bg: 'bg-violet-50', text: 'text-violet-700', border: 'border-violet-200', icon: 'text-violet-500' },
+  'التربية الاسلامية': { bg: 'bg-green-50', text: 'text-green-700', border: 'border-green-200', icon: 'text-green-500' },
+};

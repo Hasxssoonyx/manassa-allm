@@ -1,0 +1,107 @@
+
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+    <title>منصة الأستاذ الذكية</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+      tailwind.config = {
+        darkMode: 'class',
+        theme: {
+          extend: {
+            colors: {
+              primary: '#6366f1',
+              success: '#10b981',
+              danger: '#f43f5e',
+              surface: '#ffffff'
+            },
+            borderRadius: {
+              'card': '2.5rem',
+              'button': '1.25rem'
+            }
+          }
+        }
+      }
+    </script>
+    <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@300;400;500;700;800;900&display=swap" rel="stylesheet">
+    <style>
+      body {
+        font-family: 'Tajawal', sans-serif;
+        background-color: #fcfdfe;
+        color: #1e293b;
+        -webkit-tap-highlight-color: transparent;
+        overflow-x: hidden;
+        
+        /* منع تحديد النصوص في كامل التطبيق لجعله يبدو كتطبيق محلي */
+        user-select: none;
+        -webkit-user-select: none;
+        -moz-user-select: none;
+        -ms-user-select: none;
+      }
+      
+      /* استثناء حقول الإدخال للسماح بالكتابة والتعديل */
+      input, textarea, [contenteditable="true"] {
+        user-select: text !important;
+        -webkit-user-select: text !important;
+        -moz-user-select: text !important;
+        -ms-user-select: text !important;
+      }
+
+      ::-webkit-scrollbar {
+        display: none;
+      }
+      * {
+        scrollbar-width: none;
+        -ms-overflow-style: none;
+      }
+
+      .page-transition {
+        animation: slideIn 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+      }
+      @keyframes slideIn {
+        from { opacity: 0; transform: translateY(20px); }
+        to { opacity: 1; transform: translateY(0); }
+      }
+      
+      input[type="number"]::-webkit-inner-spin-button,
+      input[type="number"]::-webkit-outer-spin-button {
+        -webkit-appearance: none;
+        margin: 0;
+      }
+    </style>
+  <script type="importmap">
+{
+  "imports": {
+    "react": "https://esm.sh/react@^19.2.3",
+    "react-dom/": "https://esm.sh/react-dom@^19.2.3/",
+    "react/": "https://esm.sh/react@^19.2.3/",
+    "path": "https://esm.sh/path@^0.12.7",
+    "url": "https://esm.sh/url@^0.11.4",
+    "vite": "https://esm.sh/vite@^7.3.0",
+    "@vitejs/plugin-react": "https://esm.sh/@vitejs/plugin-react@^5.1.2",
+    "lucide-react": "https://esm.sh/lucide-react@^0.562.0"
+  }
+}
+</script>
+<link rel="stylesheet" href="/index.css">
+</head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="./index.tsx"></script>
+    <script>
+      // تسجيل الـ Service Worker لضمان عمل التطبيق بدون إنترنت
+      if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+          navigator.serviceWorker.register('./sw.js').then(reg => {
+            console.log('SW Registered');
+          }).catch(err => {
+            console.log('SW Registration Failed', err);
+          });
+        });
+      }
+    </script>
+  <script type="module" src="/index.tsx"></script>
+</body>
+</html>
