@@ -4,7 +4,7 @@ import { getAuth } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth
 import { getFirestore } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 
 export const firebaseConfig = {
-  apiKey: "AIzaSyAzJqiBkw2wlaGlftaWTAHpyQLT5zk4gNI",
+  apiKey: "AIzaSyAZJqiBkw2wlaGlftaWTAHpyQLT5zk4gNI",
   authDomain: "manasa-allm.firebaseapp.com",
   projectId: "manasa-allm",
   storageBucket: "manasa-allm.firebasestorage.app",
