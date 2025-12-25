@@ -38,10 +38,14 @@ export interface Group {
   id: string;
   name: string;
   location: string;
-  phone: string;
+  // Fix: Made phone optional as it is not always provided in App.tsx
+  phone?: string;
   schedule: GroupSchedule[];
   students: Student[];
   exams: Exam[];
+  // Fix: Added studentUsernames and teacherUid to match usage in App.tsx and fix property access errors
+  studentUsernames: string[];
+  teacherUid?: string;
 }
 
 export const DAYS: DayOfWeek[] = ['الأحد', 'الاثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة', 'السبت'];
