@@ -1,8 +1,8 @@
-import { initializeApp } from "firebase/app";
-import { getAuth, setPersistence, indexedDBLocalPersistence } from "firebase/auth";
-import { getFirestore, enableIndexedDbPersistence } from "firebase/firestore";
 
-// إعدادات Firebase الخاصة بك
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+import { getAuth, setPersistence, indexedDBLocalPersistence } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
+import { getFirestore, enableIndexedDbPersistence } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+
 export const firebaseConfig = {
   apiKey: "AIzaSyAZJqiBkw2wlaGlftaWTAHpyQLT5zk4gNI",
   authDomain: "manasa-allm.firebaseapp.com",
@@ -13,22 +13,20 @@ export const firebaseConfig = {
   measurementId: "G-BQV883ED13"
 };
 
-// تهيئة التطبيق
 const app = initializeApp(firebaseConfig);
-
-// 1. إعداد Auth ليحفظ بيانات الدخول حتى عند إغلاق الإنترنت
 export const auth = getAuth(app);
-setPersistence(auth, indexedDBLocalPersistence).catch((err) => {
-    console.error("خطأ في تفعيل حفظ جلسة الدخول:", err);
-});
 
-// 2. إعداد Firestore ليحفظ الجداول والبيانات أوفلاين
+// تفعيل حفظ الجلسة لتبقى نشطة حتى بدون إنترنت
+setPersistence(auth, indexedDBLocalPersistence).catch(err => console.log("Persistence error", err));
+
 export const db = getFirestore(app);
+
+// تفعيل العمل بدون إنترنت للبيانات
 enableIndexedDbPersistence(db).catch((err) => {
     if (err.code == 'failed-precondition') {
-        console.log("التخزين مفعّل في تبويب آخر");
+        console.log("Persistence failed: multiple tabs open");
     } else if (err.code == 'unimplemented') {
-        console.log("المتصفح لا يدعم التخزين في هذا الجهاز");
+        console.log("Persistence is not supported by this browser");
     }
 });
 
