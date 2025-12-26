@@ -16,7 +16,7 @@ export interface ExamResult {
   studentId: string;
   grade: number;
   status: 'present' | 'absent' | 'excused';
-  notified?: boolean; // خاصية الإشعار
+  notified?: boolean;
 }
 
 export interface Exam {
@@ -24,7 +24,7 @@ export interface Exam {
   title: string;
   date: string;
   maxGrade: number;
-  type: 'daily' | 'semester';
+  type: 'daily' | 'semester'; // Added support for Daily/Semester
   results: Record<string, ExamResult>;
 }
 
@@ -38,12 +38,10 @@ export interface Group {
   id: string;
   name: string;
   location: string;
-  // Fix: Made phone optional as it is not always provided in App.tsx
   phone?: string;
   schedule: GroupSchedule[];
   students: Student[];
   exams: Exam[];
-  // Fix: Added studentUsernames and teacherUid to match usage in App.tsx and fix property access errors
   studentUsernames: string[];
   teacherUid?: string;
 }
