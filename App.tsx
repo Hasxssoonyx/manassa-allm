@@ -163,31 +163,47 @@ const App: React.FC = () => {
   };
 
   useEffect(() => {
-    const unsub = onAuthStateChanged(auth, async (user) => {
-      if (user) {
-        const docRef = doc(db, "users", user.uid);
+  const unsub = onAuthStateChanged(auth, async (user) => {
+    if (user) {
+      const docRef = doc(db, "users", user.uid);
+      
+      try {
+        // نستخدم getDoc من الذاكرة المحلية أولاً إذا لم يوجد إنترنت
         const userDoc = await getDoc(docRef);
+        
         if (userDoc.exists()) {
           const userData = userDoc.data() as UserConfig;
           setConfig({ ...userData, onboarded: true });
+          
           if (userData.darkMode) document.documentElement.classList.add('dark');
+
           if (userData.role === 'teacher') {
             setView('dashboard');
             const qG = query(collection(db, "groups"), where("teacherUid", "==", user.uid));
+            // Snapshot تعمل تلقائياً مع الأوفلاين وتجلب البيانات المخزنة
             onSnapshot(qG, snap => setGroups(snap.docs.map(d => ({ id: d.id, ...d.data() } as Group))));
           } else {
             setView('schedule');
             const qG = query(collection(db, "groups"), where("studentUsernames", "array-contains", userData.username.toLowerCase()));
             onSnapshot(qG, snap => setGroups(snap.docs.map(d => ({ id: d.id, ...d.data() } as Group))));
           }
-        } else { await signOut(auth); setAuthMode('selection'); }
-      } else {
-        setConfig({ name: '', username: '', role: null, profileImage: null, darkMode: false, onboarded: false });
-        setAuthMode('selection');
+        } else {
+          // إذا كان الجهاز متصلاً بالإنترنت والوثيقة غير موجودة فعلاً
+          if (navigator.onLine) {
+            await signOut(auth); 
+            setAuthMode('selection');
+          }
+        }
+      } catch (error) {
+        console.log("أنت تعمل في وضع الأوفلاين، يتم استخدام البيانات المخزنة");
       }
-    });
-    return () => unsub();
-  }, []);
+    } else {
+      setConfig({ name: '', username: '', role: null, profileImage: null, darkMode: false, onboarded: false });
+      setAuthMode('selection');
+    }
+  });
+  return () => unsub();
+}, []);
 
   const handleAuth = async () => {
     if (!authUsername || !authPassword) return showToast('يرجى ملء الحقول', 'error');
