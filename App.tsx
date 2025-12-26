@@ -10,6 +10,11 @@ import { ICONS, SUBJECT_COLORS } from './constants';
 import Modal from './components/Modal';
 import LectureCard from './components/LessonCard';
 import HomeworkItem from './components/HomeworkItem';
+import React, { useEffect, useState } from 'react';
+import { onAuthStateChanged, signOut } from "firebase/auth";
+import { doc, getDoc, collection, query, where, onSnapshot } from "firebase/firestore";
+import { auth, db } from "./firebase";
+import { useNavigate } from "react-router-dom";
 
 // --- تجاوز مشكلة الـ reCAPTCHA برمجياً ---
 (window as any).FIREBASE_APPCHECK_DEBUG_TOKEN = true;
@@ -162,49 +167,63 @@ const App: React.FC = () => {
     return stats;
   };
 
-  useEffect(() => {
-  const unsub = onAuthStateChanged(auth, async (user) => {
-    if (user) {
-      const docRef = doc(db, "users", user.uid);
-      
-      try {
-        // نستخدم getDoc من الذاكرة المحلية أولاً إذا لم يوجد إنترنت
-        const userDoc = await getDoc(docRef);
-        
-        if (userDoc.exists()) {
-          const userData = userDoc.data() as UserConfig;
-          setConfig({ ...userData, onboarded: true });
-          
-          if (userData.darkMode) document.documentElement.classList.add('dark');
 
-          if (userData.role === 'teacher') {
-            setView('dashboard');
-            const qG = query(collection(db, "groups"), where("teacherUid", "==", user.uid));
-            // Snapshot تعمل تلقائياً مع الأوفلاين وتجلب البيانات المخزنة
-            onSnapshot(qG, snap => setGroups(snap.docs.map(d => ({ id: d.id, ...d.data() } as Group))));
-          } else {
-            setView('schedule');
-            const qG = query(collection(db, "groups"), where("studentUsernames", "array-contains", userData.username.toLowerCase()));
-            onSnapshot(qG, snap => setGroups(snap.docs.map(d => ({ id: d.id, ...d.data() } as Group))));
+
+const App: React.FC = () => {
+  const navigate = useNavigate();
+  // إضافة حالة للتحميل لمنع التأخير والتوجيه الخاطئ
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const unsub = onAuthStateChanged(auth, async (user) => {
+      try {
+        if (user) {
+          const docRef = doc(db, "users", user.uid);
+          // محاولة جلب البيانات (ستعمل أوفلاين لأننا فعلنا Persistence في firebase.ts)
+          const userDoc = await getDoc(docRef);
+          
+          if (userDoc.exists()) {
+            const userData = userDoc.data();
+            // وضع الإعدادات الخاصة بك هنا (مثال)
+            if (userData.darkMode) document.documentElement.classList.add('dark');
+            
+            // التوجيه فوراً بناءً على الدور
+            if (userData.role === 'teacher') {
+               navigate('/dashboard');
+            } else {
+               navigate('/schedule');
+            }
+          } else if (navigator.onLine) {
+            await signOut(auth);
+            navigate('/selection');
           }
         } else {
-          // إذا كان الجهاز متصلاً بالإنترنت والوثيقة غير موجودة فعلاً
-          if (navigator.onLine) {
-            await signOut(auth); 
-            setAuthMode('selection');
-          }
+          // إذا لم يوجد مستخدم أصلاً
+          navigate('/selection');
         }
       } catch (error) {
-        console.log("أنت تعمل في وضع الأوفلاين، يتم استخدام البيانات المخزنة");
+        console.log("تعذر جلب البيانات، يعمل في وضع الأوفلاين");
+      } finally {
+        // انتهى الفحص، أغلق شاشة التحميل
+        setLoading(false);
       }
-    } else {
-      setConfig({ name: '', username: '', role: null, profileImage: null, darkMode: false, onboarded: false });
-      setAuthMode('selection');
-    }
-  });
-  return () => unsub();
-}, []);
+    });
 
+    return () => unsub();
+  }, [navigate]);
+
+  // إذا كان التطبيق لا يزال يفحص الحالة، أظهر شاشة بيضاء أو علامة تحميل
+  if (loading) {
+    return (
+      <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}>
+        <p>جاري التحميل...</p> 
+      </div>
+    );
+  }
+
+  return null; // سيتم التوجيه بواسطة navigate
+};
+  
   const handleAuth = async () => {
     if (!authUsername || !authPassword) return showToast('يرجى ملء الحقول', 'error');
     if (authUsername.length < 4 || authUsername.length > 12) return showToast('اسم المستخدم يجب أن يكون بين 4 و 12 حرفاً', 'error');
