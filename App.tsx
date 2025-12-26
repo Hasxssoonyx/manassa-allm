@@ -60,7 +60,6 @@ const Toast: React.FC<{ message: string; type: 'success' | 'error'; onClose: () 
 };
 
 const App: React.FC = () => {
-  // --- States ---
   const [groups, setGroups] = useState<Group[]>([]);
   const [studentLectures, setStudentLectures] = useState<StudentLecture[]>([]);
   const [studentHomeworks, setStudentHomeworks] = useState<StudentHomework[]>([]);
@@ -74,6 +73,7 @@ const App: React.FC = () => {
   const [authPassword, setAuthPassword] = useState('');
   const [authName, setAuthName] = useState('');
   const [isSyncing, setIsSyncing] = useState(false);
+  const [groupSearch, setGroupSearch] = useState('');
 
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
   const [view, setView] = useState<'dashboard' | 'details' | 'schedule' | 'homework' | 'teacher-weekly' | 'student-results'>('dashboard');
@@ -81,7 +81,6 @@ const App: React.FC = () => {
   const [activeGroupId, setActiveGroupId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
 
-  // Modals
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isGroupModalOpen, setIsGroupModalOpen] = useState(false);
   const [isStudentModalOpen, setIsStudentModalOpen] = useState(false);
@@ -95,22 +94,57 @@ const App: React.FC = () => {
   const [isNoteModalOpen, setIsNoteModalOpen] = useState(false);
   const [tempNote, setTempNote] = useState('');
 
-  // Forms
   const [newGroupName, setNewGroupName] = useState('');
   const [newGroupLocation, setNewGroupLocation] = useState('');
   const [newStudentName, setNewStudentName] = useState('');
   const [newStudentUsername, setNewStudentUsername] = useState('');
   const [newExamTitle, setNewExamTitle] = useState('');
   const [newExamMaxGrade, setNewExamMaxGrade] = useState(100);
+  const [newExamType, setNewExamType] = useState<'daily' | 'semester'>('daily');
   const [newGSched, setNewGSched] = useState<{day: DayOfWeek, time: string}>({day: 'السبت', time: ''});
-  const [newHomeworkTask, setNewHomeworkTask] = useState('');
-  const [newHomeworkSubject, setNewHomeworkSubject] = useState(SUBJECTS[0]);
   const [itemToDelete, setItemToDelete] = useState<{ id: string; type: string } | null>(null);
 
-  // Derived Values
   const activeGroup = useMemo(() => groups.find(g => g.id === activeGroupId), [groups, activeGroupId]);
   const selectedStudent = useMemo(() => activeGroup?.students.find(s => s.id === selectedStudentId), [activeGroup, selectedStudentId]);
   const selectedExam = useMemo(() => activeGroup?.exams.find(e => e.id === selectedExamId), [activeGroup, selectedExamId]);
+
+  const filteredGroups = useMemo(() => {
+    return groups.filter(g => g.name.toLowerCase().includes(groupSearch.toLowerCase()) || g.location.toLowerCase().includes(groupSearch.toLowerCase()));
+  }, [groups, groupSearch]);
+
+  const studentExamHistory = useMemo(() => {
+    if (!activeGroup || !selectedStudentId) return [];
+    return activeGroup.exams.map(ex => ({
+      title: ex.title,
+      date: ex.date,
+      maxGrade: ex.maxGrade,
+      result: ex.results[selectedStudentId]
+    })).filter(h => h.result);
+  }, [activeGroup, selectedStudentId]);
+
+  // Fix: Adding missing myResults calculation for student view across multiple groups
+  const myResults = useMemo(() => {
+    if (config.role !== 'student' || !config.username) return [];
+    const results: any[] = [];
+    groups.forEach(group => {
+      const studentInGroup = group.students.find(s => s.username === config.username.toLowerCase());
+      if (studentInGroup) {
+        group.exams.forEach(exam => {
+          const res = exam.results[studentInGroup.id];
+          if (res) {
+            results.push({
+              examTitle: exam.title,
+              groupName: group.name,
+              date: exam.date,
+              grade: res.grade,
+              maxGrade: exam.maxGrade
+            });
+          }
+        });
+      }
+    });
+    return results;
+  }, [groups, config.username, config.role]);
 
   const showToast = (message: string, type: 'success' | 'error') => setToast({ message, type });
 
@@ -128,24 +162,6 @@ const App: React.FC = () => {
     return stats;
   };
 
-  // --- Persistence for Personal Student Tasks ---
-  useEffect(() => {
-    if (config.role === 'student') {
-      const savedLectures = localStorage.getItem(`lectures_${config.username}`);
-      const savedHomeworks = localStorage.getItem(`homeworks_${config.username}`);
-      if (savedLectures) setStudentLectures(JSON.parse(savedLectures));
-      if (savedHomeworks) setStudentHomeworks(JSON.parse(savedHomeworks));
-    }
-  }, [config.role, config.username]);
-
-  useEffect(() => {
-    if (config.role === 'student' && config.username) {
-      localStorage.setItem(`lectures_${config.username}`, JSON.stringify(studentLectures));
-      localStorage.setItem(`homeworks_${config.username}`, JSON.stringify(studentHomeworks));
-    }
-  }, [studentLectures, studentHomeworks]);
-
-  // --- Auth & Firestore Sync ---
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, async (user) => {
       if (user) {
@@ -155,7 +171,6 @@ const App: React.FC = () => {
           const userData = userDoc.data() as UserConfig;
           setConfig({ ...userData, onboarded: true });
           if (userData.darkMode) document.documentElement.classList.add('dark');
-          
           if (userData.role === 'teacher') {
             setView('dashboard');
             const qG = query(collection(db, "groups"), where("teacherUid", "==", user.uid));
@@ -176,11 +191,12 @@ const App: React.FC = () => {
 
   const handleAuth = async () => {
     if (!authUsername || !authPassword) return showToast('يرجى ملء الحقول', 'error');
+    if (authUsername.length < 4 || authUsername.length > 12) return showToast('اسم المستخدم يجب أن يكون بين 4 و 12 حرفاً', 'error');
     setIsSyncing(true);
     const email = authUsername.trim().toLowerCase() + "@manasa.com";
     try {
       if (authMode === 'signup') {
-        if (!authName) throw new Error();
+        if (!authName) { setIsSyncing(false); return showToast('يرجى كتابة الاسم الكامل', 'error'); }
         const cred = await createUserWithEmailAndPassword(auth, email, authPassword);
         const userData = { name: authName, username: authUsername.trim().toLowerCase(), role: pendingRole, profileImage: null, darkMode: false, onboarded: true };
         await setDoc(doc(db, "users", cred.user.uid), userData);
@@ -189,10 +205,9 @@ const App: React.FC = () => {
         await signInWithEmailAndPassword(auth, email, authPassword);
       }
       showToast('تم بنجاح', 'success');
-    } catch (e) { showToast('خطأ في البيانات', 'error'); } finally { setIsSyncing(false); }
+    } catch (e) { showToast('خطأ في البيانات أو المستخدم موجود مسبقاً', 'error'); } finally { setIsSyncing(false); }
   };
 
-  // --- Teacher Operations ---
   const handleAddGroup = async () => {
     if (!newGroupName || !newGroupLocation) return;
     await addDoc(collection(db, "groups"), { name: newGroupName, location: newGroupLocation, teacherUid: auth.currentUser?.uid, students: [], exams: [], schedule: [], studentUsernames: [] });
@@ -214,26 +229,30 @@ const App: React.FC = () => {
 
   const handleAddExam = async () => {
     if (!newExamTitle || !activeGroupId) return;
+    const maxVal = Math.min(newExamMaxGrade, 100);
     const newExam: Exam = {
       id: Date.now().toString(), title: newExamTitle, date: new Date().toLocaleDateString('ar-EG'),
-      maxGrade: newExamMaxGrade, type: 'daily', results: {}
+      maxGrade: maxVal, type: newExamType, results: {}
     };
     await updateDoc(doc(db, "groups", activeGroupId), { exams: arrayUnion(newExam) });
     setIsExamModalOpen(false); setNewExamTitle('');
     showToast('تمت إضافة الامتحان', 'success');
   };
 
-  const handleAddGroupSchedule = async () => {
-    if (!activeGroupId || !newGSched.time) return;
-    const schedule: GroupSchedule = { id: Date.now().toString(), day: newGSched.day, time: newGSched.time };
-    await updateDoc(doc(db, "groups", activeGroupId), { schedule: arrayUnion(schedule) });
-    setIsAddGroupScheduleModalOpen(false);
-    showToast('تمت إضافة الموعد بنجاح', 'success');
+  const handleEditStudentName = async () => {
+    if (!activeGroup || !selectedStudentId) return;
+    const newName = window.prompt("أدخل الاسم الجديد للطالب:", selectedStudent?.name);
+    if (newName && newName.trim()) {
+      const updated = activeGroup.students.map(s => s.id === selectedStudentId ? { ...s, name: newName } : s);
+      await updateDoc(doc(db, "groups", activeGroup.id), { students: updated });
+      showToast('تم تحديث اسم الطالب بنجاح', 'success');
+    }
   };
 
   const updateGrade = async (examId: string, studentId: string, grade: number, status: any) => {
     if (!activeGroup) return;
-    const updatedExams = activeGroup.exams.map(ex => ex.id === examId ? { ...ex, results: { ...ex.results, [studentId]: { studentId, grade, status } } } : ex);
+    const gradeVal = Math.min(grade, 100);
+    const updatedExams = activeGroup.exams.map(ex => ex.id === examId ? { ...ex, results: { ...ex.results, [studentId]: { studentId, grade: gradeVal, status } } } : ex);
     await updateDoc(doc(db, "groups", activeGroup.id), { exams: updatedExams });
   };
 
@@ -249,6 +268,35 @@ const App: React.FC = () => {
     await updateDoc(doc(db, "groups", activeGroup.id), { students: updated });
   };
 
+  const handleProfilePicChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onloadend = async () => {
+        const base64 = reader.result as string;
+        setConfig(prev => ({ ...prev, profileImage: base64 }));
+        if (auth.currentUser) await updateDoc(doc(db, "users", auth.currentUser.uid), { profileImage: base64 });
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const handleUpdateName = async () => {
+    const newName = window.prompt("أدخل اسمك الجديد:", config.name);
+    if (newName && newName.trim()) {
+      setConfig(prev => ({ ...prev, name: newName }));
+      if (auth.currentUser) await updateDoc(doc(db, "users", auth.currentUser.uid), { name: newName });
+      showToast('تم تحديث الاسم', 'success');
+    }
+  };
+
+  const handleSignOut = async () => {
+    if (window.confirm("هل أنت متأكد من رغبتك في تسجيل الخروج؟")) {
+      await signOut(auth);
+      window.location.reload();
+    }
+  };
+
   const confirmDelete = async () => {
     if (!itemToDelete) return;
     const { id, type } = itemToDelete;
@@ -262,62 +310,35 @@ const App: React.FC = () => {
        } else if (type === 'exam') {
           const updated = activeGroup?.exams.filter(e => e.id !== id);
           await updateDoc(groupRef, { exams: updated });
-       } else if (type === 'gschedule') {
-          const updated = activeGroup?.schedule.filter(s => s.id !== id);
-          await updateDoc(groupRef, { schedule: updated });
        }
     }
-    setIsConfirmDeleteOpen(false); setItemToDelete(null); showToast('تم الحذف', 'success');
+    setIsConfirmDeleteOpen(false); setItemToDelete(null); showToast('تم الحذف بنجاح', 'success');
   };
-
-  // --- Student Operations ---
-  const handleAddPersonalLecture = () => {
-    if (!newGSched.time) return;
-    const l: StudentLecture = { id: Date.now().toString(), subject: newHomeworkSubject, day: newGSched.day, time: newGSched.time, type: 'physical', postponed: false };
-    setStudentLectures([...studentLectures, l]);
-    setIsAddLectureModalOpen(false);
-    showToast('تمت إضافة الحصة للجدول', 'success');
-  };
-
-  const handleAddPersonalHomework = () => {
-    if (!newHomeworkTask) return;
-    const h: StudentHomework = { id: Date.now().toString(), subject: newHomeworkSubject, task: newHomeworkTask, completed: false, createdAt: new Date().toLocaleDateString('ar-EG') };
-    setStudentHomeworks([h, ...studentHomeworks]);
-    setIsAddHomeworkModalOpen(false); setNewHomeworkTask('');
-    showToast('تمت إضافة المهمة', 'success');
-  };
-
-  const myResults = useMemo(() => {
-    if (config.role !== 'student') return [];
-    const results: any[] = [];
-    groups.forEach(g => {
-      const sInG = g.students.find(s => s.username === config.username);
-      if (sInG) g.exams.forEach(ex => { if (ex.results[sInG.id]) results.push({ groupName: g.name, examTitle: ex.title, ...ex.results[sInG.id], maxGrade: ex.maxGrade, date: ex.date }); });
-    });
-    return results;
-  }, [groups, config.username]);
 
   if (!config.onboarded) {
     return (
-      <div className="min-h-screen bg-white dark:bg-slate-950 flex flex-col items-center justify-center p-8 animate-fade-in text-center">
-        <div className="w-24 h-24 bg-indigo-600 rounded-[2.5rem] flex items-center justify-center text-white shadow-2xl mb-8 transform hover:scale-110 transition-transform">{ICONS.GraduationCap}</div>
+      <div className="min-h-screen bg-slate-50 dark:bg-slate-950 flex flex-col items-center justify-center p-8 animate-fade-in text-center relative overflow-hidden login-bg">
+        <div className="absolute inset-0 opacity-10 pointer-events-none bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-indigo-500 via-transparent to-transparent"></div>
+        <div className="w-24 h-24 bg-indigo-600 rounded-[2.5rem] flex items-center justify-center text-white shadow-2xl mb-8 transform hover:scale-110 transition-transform z-10">{ICONS.GraduationCap}</div>
         {authMode === 'selection' ? (
-          <div className="w-full max-w-sm space-y-6">
+          <div className="w-full max-w-sm space-y-6 z-10">
             <h1 className="text-4xl font-black mb-8 dark:text-white tracking-tighter">منصة الأستاذ</h1>
+            <div className="text-xs font-bold text-slate-400 mb-2">بالتعاون مع الاستاذ عمار</div>
             <button onClick={() => { setPendingRole('teacher'); setAuthMode('login'); }} className="w-full py-6 bg-indigo-600 text-white rounded-[2rem] font-black text-lg shadow-xl active:scale-95 transition-all">دخول (مدرس)</button>
             <button onClick={() => { setPendingRole('student'); setAuthMode('login'); }} className="w-full py-6 bg-white dark:bg-slate-800 border-2 border-indigo-100 dark:border-slate-700 text-indigo-600 dark:text-indigo-400 rounded-[2rem] font-black text-lg">دخول (طالب)</button>
+            <div className="mt-8 text-[10px] font-black text-slate-400 opacity-50 uppercase tracking-widest">تم التطوير بواسطة حسنين</div>
           </div>
         ) : (
-          <div className="w-full max-w-sm space-y-4 animate-slide-in">
+          <div className="w-full max-w-sm space-y-4 animate-slide-in z-10">
             <h2 className="text-2xl font-black dark:text-white">{authMode === 'login' ? 'تسجيل الدخول' : 'حساب جديد'}</h2>
-            <div className="text-[10px] font-black text-indigo-500 uppercase tracking-widest bg-indigo-50 dark:bg-indigo-900/30 px-4 py-1.5 rounded-full inline-block">رتبة: {pendingRole === 'teacher' ? 'مدرس' : 'طالب'}</div>
+            <div className="text-[10px] font-black text-indigo-500 uppercase tracking-widest bg-indigo-50 dark:bg-indigo-900/30 px-4 py-1.5 rounded-full inline-block mb-4">رتبة: {pendingRole === 'teacher' ? 'مدرس' : 'طالب'}</div>
             {authMode === 'signup' && <input type="text" placeholder="الاسم الكامل" className="field" value={authName} onChange={e => setAuthName(e.target.value)} />}
             <input type="text" placeholder="اسم المستخدم (English)" className="field ltr-input" value={authUsername} onChange={e => setAuthUsername(e.target.value.replace(/[^a-z0-9_]/g, ''))} />
             <input type="password" placeholder="كلمة المرور" className="field ltr-input" value={authPassword} onChange={e => setAuthPassword(e.target.value)} />
-            <button disabled={isSyncing} onClick={handleAuth} className="w-full py-5 bg-indigo-600 text-white rounded-[2rem] font-black shadow-lg flex items-center justify-center gap-2 mt-4">
+            <button disabled={isSyncing} onClick={handleAuth} className="w-full py-5 bg-indigo-600 text-white rounded-[2rem] font-black shadow-lg flex items-center justify-center gap-2 mt-4 hover:shadow-indigo-500/20">
               {isSyncing ? <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"></div> : 'تأكيد'}
             </button>
-            <button onClick={() => setAuthMode(authMode === 'login' ? 'signup' : 'login')} className="text-sm font-black text-indigo-500 block mx-auto">{authMode === 'login' ? 'سجل الآن' : 'لديك حساب؟'}</button>
+            <button onClick={() => setAuthMode(authMode === 'login' ? 'signup' : 'login')} className="text-sm font-black text-indigo-500 block mx-auto py-2">{authMode === 'login' ? 'سجل الآن' : 'لديك حساب؟'}</button>
             <button onClick={() => setAuthMode('selection')} className="text-xs text-slate-400 block mx-auto">رجوع</button>
           </div>
         )}
@@ -332,10 +353,10 @@ const App: React.FC = () => {
       <header className="sticky top-0 z-50 bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl p-5 flex items-center justify-between border-b border-slate-100 dark:border-slate-800">
         <div className="flex items-center gap-4">
           {config.role === 'teacher' && view !== 'dashboard' && view !== 'teacher-weekly' && (
-            <button onClick={() => setView('dashboard')} className="p-3 bg-slate-50 dark:bg-slate-800 rounded-2xl rotate-180 text-slate-400">{ICONS.ChevronLeft}</button>
+            <button onClick={() => setView('dashboard')} className="p-3 bg-slate-50 dark:bg-slate-800 rounded-2xl rotate-180 text-slate-400 shadow-sm transition-transform active:scale-90">{ICONS.ChevronLeft}</button>
           )}
           <div className="flex items-center gap-3">
-             <div onClick={() => setIsSettingsOpen(true)} className="w-11 h-11 rounded-2xl bg-indigo-100 dark:bg-indigo-900/30 flex items-center justify-center border-2 border-white shadow-sm cursor-pointer text-indigo-600 overflow-hidden">
+             <div onClick={() => setIsSettingsOpen(true)} className="w-11 h-11 rounded-2xl bg-indigo-100 dark:bg-indigo-900/30 flex items-center justify-center border-2 border-white dark:border-slate-700 shadow-sm cursor-pointer text-indigo-600 overflow-hidden">
                 {config.profileImage ? <img src={config.profileImage} className="w-full h-full object-cover" /> : ICONS.User}
              </div>
              <div>
@@ -344,19 +365,25 @@ const App: React.FC = () => {
              </div>
           </div>
         </div>
-        <button onClick={() => setIsSettingsOpen(true)} className="p-3 bg-slate-50 dark:bg-slate-800 text-slate-400 rounded-2xl hover:bg-indigo-50">{ICONS.Settings}</button>
+        <button onClick={() => setIsSettingsOpen(true)} className="p-3 bg-slate-50 dark:bg-slate-800 text-slate-400 rounded-2xl hover:bg-indigo-50 transition-all">{ICONS.Settings}</button>
       </header>
 
       <main className="max-w-4xl mx-auto p-4 lg:p-6">
         {config.role === 'teacher' ? (
           view === 'dashboard' ? (
             <div className="space-y-6 animate-fade-in">
-              <div className="flex justify-between items-center px-2">
-                <h3 className="text-2xl font-black dark:text-white tracking-tighter">مجموعاتي</h3>
-                <button onClick={() => setIsGroupModalOpen(true)} className="p-4 bg-indigo-600 text-white rounded-2xl shadow-lg hover:scale-110 active:scale-95 transition-all">{ICONS.Plus}</button>
+              <div className="flex flex-col gap-4 px-2">
+                <div className="flex justify-between items-center">
+                  <h3 className="text-2xl font-black dark:text-white tracking-tighter">مجموعاتي</h3>
+                  <button onClick={() => setIsGroupModalOpen(true)} className="p-4 bg-indigo-600 text-white rounded-2xl shadow-lg hover:scale-110 active:scale-95 transition-all">{ICONS.Plus}</button>
+                </div>
+                <div className="relative">
+                   <div className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400">{ICONS.Search}</div>
+                   <input type="text" placeholder="ابحث عن مجموعة..." className="field !pr-12 !py-4" value={groupSearch} onChange={e => setGroupSearch(e.target.value)} />
+                </div>
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-                {groups.map(g => (
+                {filteredGroups.map(g => (
                   <div key={g.id} onClick={() => { setActiveGroupId(g.id); setView('details'); }} className="bg-white dark:bg-slate-900 p-7 rounded-[2.5rem] border border-slate-100 dark:border-slate-800 hover:shadow-2xl transition-all cursor-pointer relative overflow-hidden group">
                     <div className="flex justify-between items-start mb-6">
                         <div className="w-14 h-14 bg-indigo-50 dark:bg-indigo-900/20 rounded-2xl flex items-center justify-center text-indigo-600">{ICONS.Users}</div>
@@ -371,28 +398,6 @@ const App: React.FC = () => {
                 ))}
               </div>
             </div>
-          ) : view === 'teacher-weekly' ? (
-             <div className="space-y-8 animate-fade-in">
-                <h3 className="text-2xl font-black dark:text-white px-2">الجدول الأسبوعي المجمع</h3>
-                {DAYS.map(day => {
-                   const dayScheds = groups.flatMap(g => g.schedule.filter(s => s.day === day).map(s => ({ ...s, groupName: g.name, loc: g.location })));
-                   if (dayScheds.length === 0) return null;
-                   return (
-                     <div key={day} className="space-y-4">
-                        <h4 className="text-xs font-black text-slate-400 pr-3 tracking-widest">{day}</h4>
-                        {dayScheds.map(s => (
-                          <div key={s.id} className="bg-white dark:bg-slate-900 p-6 rounded-[2rem] border border-slate-100 dark:border-slate-800 shadow-sm flex items-center gap-4 hover:shadow-md transition-all">
-                             <div className="w-12 h-12 bg-indigo-50 dark:bg-indigo-900/20 rounded-2xl flex items-center justify-center text-indigo-600">{ICONS.Clock}</div>
-                             <div>
-                               <h5 className="font-black dark:text-white">{s.groupName}</h5>
-                               <p className="text-[11px] font-bold text-slate-400">{formatTime12h(s.time)} - {s.loc}</p>
-                             </div>
-                          </div>
-                        ))}
-                     </div>
-                   );
-                })}
-             </div>
           ) : (
             <div className="space-y-6 animate-fade-in">
                <div className="bg-white dark:bg-slate-900 p-7 rounded-[2.5rem] border border-slate-100 dark:border-slate-800 shadow-sm flex flex-col sm:flex-row justify-between items-center gap-4 sticky top-24 z-40 backdrop-blur-lg">
@@ -413,22 +418,22 @@ const App: React.FC = () => {
                        <input type="text" placeholder="ابحث عن طالب..." className="w-full field !p-5" value={searchQuery} onChange={e => setSearchQuery(e.target.value)} />
                        <button onClick={() => setIsStudentModalOpen(true)} className="p-5 bg-indigo-600 text-white rounded-[1.8rem] hover:bg-indigo-700 active:scale-90 transition-all">{ICONS.Plus}</button>
                     </div>
-                    <div className="grid grid-cols-1 gap-4">
+                    <div className="grid grid-cols-1 gap-4 px-1">
                        {activeGroup?.students.filter(s => s.name.includes(searchQuery)).map(s => (
                           <div key={s.id} onClick={() => setSelectedStudentId(s.id)} className="bg-white dark:bg-slate-900 p-6 rounded-[2.2rem] border border-slate-100 dark:border-slate-800 flex items-center justify-between hover:shadow-xl transition-all cursor-pointer group">
                              <div className="flex items-center gap-5">
-                                <button onClick={(e) => { e.stopPropagation(); toggleStar(s.id); }} className={`p-2 transition-all ${s.starred ? 'text-amber-400 fill-amber-400 scale-110' : 'text-slate-200 hover:text-amber-200'}`}>{ICONS.Star}</button>
+                                <button onClick={(e) => { e.stopPropagation(); toggleStar(s.id); }} className={`p-2 transition-all ${s.starred ? 'text-amber-400 fill-amber-400 scale-110' : 'text-slate-200'}`}>{ICONS.Star}</button>
                                 <div className="text-right">
                                   <h5 className="font-black text-slate-800 dark:text-white text-lg leading-none mb-1">{s.name}</h5>
                                   <div className="flex gap-2">
-                                     <span className={`text-[9px] font-black px-2 py-0.5 rounded-lg ${s.paid ? 'bg-emerald-100 text-emerald-600' : 'bg-rose-100 text-rose-600'}`}>{s.paid ? 'مدفوع' : 'غير مدفوع'}</span>
+                                     <span className={`text-[9px] font-black px-2 py-0.5 rounded-lg ${s.paid ? 'bg-emerald-100 text-emerald-600' : 'bg-rose-100 text-rose-600'}`}>{s.paid ? 'مدفوع' : 'قسط'}</span>
                                      <span className="text-[9px] text-slate-400 font-bold uppercase">@{s.username}</span>
                                   </div>
                                 </div>
                              </div>
-                             <button onClick={(e) => { e.stopPropagation(); togglePayment(s.id); }} className={`px-4 py-2 rounded-xl text-[10px] font-black transition-all ${s.paid ? 'bg-emerald-50 text-emerald-600' : 'bg-rose-50 text-rose-600 hover:bg-rose-100'}`}>
-                                {s.paid ? 'تغيير للدفع' : 'تأكيد القسط'}
-                             </button>
+                             <div className="flex items-center gap-2">
+                                <button onClick={(e) => { e.stopPropagation(); togglePayment(s.id); }} className={`px-4 py-2 rounded-xl text-[10px] font-black transition-all ${s.paid ? 'bg-emerald-50 text-emerald-600' : 'bg-rose-50 text-rose-600'}`}>تغيير الدفع</button>
+                             </div>
                           </div>
                        ))}
                     </div>
@@ -437,127 +442,62 @@ const App: React.FC = () => {
 
                {activeTab === 'exams' && (
                  <div className="space-y-4 px-2">
-                    <button onClick={() => setIsExamModalOpen(true)} className="w-full p-5 bg-indigo-600 text-white rounded-[1.8rem] font-black shadow-lg hover:bg-indigo-700 transition-all flex items-center justify-center gap-2">
-                        {ICONS.Plus} إضافة امتحان جديد
-                    </button>
+                    <button onClick={() => setIsExamModalOpen(true)} className="w-full p-5 bg-indigo-600 text-white rounded-[1.8rem] font-black shadow-lg">إضافة امتحان جديد</button>
                     {activeGroup?.exams.map(ex => (
-                       <div key={ex.id} onClick={() => { setSelectedExamId(ex.id); setView('student-results'); }} className="bg-white dark:bg-slate-900 p-6 rounded-[2.2rem] border border-slate-100 dark:border-slate-800 flex justify-between items-center group cursor-pointer hover:border-indigo-200 transition-all">
+                       <div key={ex.id} onClick={() => { setSelectedExamId(ex.id); setView('student-results'); }} className="bg-white dark:bg-slate-900 p-6 rounded-[2.2rem] border border-slate-100 dark:border-slate-800 flex justify-between items-center group cursor-pointer hover:border-indigo-100">
                           <div>
-                             <h5 className="font-black text-lg dark:text-white mb-1 group-hover:text-indigo-600 transition-colors">{ex.title}</h5>
-                             <span className="text-[10px] text-slate-400 font-bold flex items-center gap-1">{ICONS.Clock} {ex.date} | {ex.maxGrade} درجة</span>
+                             <h5 className="font-black text-lg dark:text-white mb-1">{ex.title}</h5>
+                             <span className="text-[10px] text-slate-400 font-bold flex items-center gap-1">
+                                <span className={`px-2 py-0.5 rounded-full ${ex.type === 'semester' ? 'bg-amber-100 text-amber-600' : 'bg-slate-100 text-slate-600'}`}>{ex.type === 'semester' ? 'فصلي' : 'يومي'}</span>
+                                {ex.date} | {ex.maxGrade} درجة
+                             </span>
                           </div>
                           <div className="flex items-center gap-2">
-                            <button onClick={(e) => { e.stopPropagation(); setItemToDelete({id: ex.id, type: 'exam'}); setIsConfirmDeleteOpen(true); }} className="p-2 text-rose-400 hover:bg-rose-50 rounded-xl opacity-0 group-hover:opacity-100 transition-all">{ICONS.Trash}</button>
-                            <button className="p-4 bg-slate-50 dark:bg-slate-800 text-slate-400 rounded-2xl hover:bg-indigo-600 hover:text-white transition-all">{ICONS.ChevronLeft}</button>
+                            <button onClick={(e) => { e.stopPropagation(); setItemToDelete({id: ex.id, type: 'exam'}); setIsConfirmDeleteOpen(true); }} className="p-2 text-rose-400 hover:bg-rose-50 rounded-xl opacity-0 group-hover:opacity-100 transition-opacity">{ICONS.Trash}</button>
+                            <button className="p-4 bg-slate-50 dark:bg-slate-800 text-slate-400 rounded-2xl">{ICONS.ChevronLeft}</button>
                           </div>
                        </div>
                     ))}
                  </div>
                )}
-
-               {activeTab === 'group-schedule' && (
-                  <div className="space-y-5 px-2">
-                     <button onClick={() => setIsAddGroupScheduleModalOpen(true)} className="w-full p-5 bg-indigo-600 text-white rounded-[1.8rem] font-black shadow-lg flex items-center justify-center gap-2">
-                        {ICONS.Plus} إضافة موعد للمجموعة
-                     </button>
-                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                        {activeGroup?.schedule.map(sc => (
-                           <div key={sc.id} className="bg-white dark:bg-slate-900 p-5 rounded-[2.2rem] border border-slate-100 dark:border-slate-800 flex items-center justify-between group shadow-sm">
-                              <div className="flex items-center gap-4">
-                                 <div className="w-12 h-12 bg-slate-50 dark:bg-slate-800 rounded-2xl flex items-center justify-center text-indigo-600">{ICONS.Clock}</div>
-                                 <div>
-                                    <h6 className="font-black text-slate-800 dark:text-white text-lg leading-none mb-1">{sc.day}</h6>
-                                    <p className="text-[11px] text-indigo-500 font-black">{formatTime12h(sc.time)}</p>
-                                 </div>
-                              </div>
-                              <button onClick={() => { setItemToDelete({id: sc.id, type: 'gschedule'}); setIsConfirmDeleteOpen(true); }} className="p-2 text-rose-400 hover:bg-rose-50 rounded-xl opacity-0 group-hover:opacity-100 transition-all">{ICONS.Trash}</button>
-                           </div>
-                        ))}
-                     </div>
-                  </div>
-               )}
             </div>
           )
         ) : (
-          /* Student View Dashboard (Merged from old script features) */
+          /* Student Dashboard (Schedule/Results) */
           <div className="space-y-8 animate-fade-in pb-20">
              {view === 'schedule' ? (
                 <div className="space-y-8 px-2">
                    <div className="flex justify-between items-center">
                      <h3 className="text-2xl font-black dark:text-white">جدولي الدراسي</h3>
-                     <button onClick={() => setIsAddLectureModalOpen(true)} className="p-4 bg-indigo-600 text-white rounded-2xl shadow-xl hover:scale-110 active:scale-95 transition-all">{ICONS.Plus}</button>
+                     <button onClick={() => setIsAddLectureModalOpen(true)} className="p-4 bg-indigo-600 text-white rounded-2xl shadow-lg">{ICONS.Plus}</button>
                    </div>
                    {DAYS.map(day => {
-                     const groupSessions = groups.flatMap(g => 
-                       g.schedule.filter(sc => sc.day === day).map(sc => ({
-                         id: sc.id, subject: g.name, time: sc.time, location: g.location, day: sc.day, type: 'physical' as any, postponed: false
-                       }))
-                     );
-                     const personalSessions = studentLectures.filter(l => l.day === day);
-                     const allSessions = [...groupSessions, ...personalSessions].sort((a,b) => a.time.localeCompare(b.time));
-                     
-                     if (allSessions.length === 0) return null;
+                     const dayS = groups.flatMap(g => g.schedule.filter(s => s.day === day).map(s => ({ id: s.id, subject: g.name, time: s.time, location: g.location, day: s.day, type: 'physical' as any, postponed: false })));
+                     if (dayS.length === 0) return null;
                      return (
                        <div key={day} className="space-y-4">
-                          <h4 className="text-xs font-black text-slate-400 pr-3 tracking-widest">{day}</h4>
-                          {allSessions.map(l => (
-                            <LectureCard 
-                              key={l.id} 
-                              lecture={l} 
-                              onEdit={()=>{}} 
-                              onDelete={(id) => setStudentLectures(prev => prev.filter(p => p.id !== id))} 
-                              onTogglePostponed={(id) => setStudentLectures(prev => prev.map(p => p.id === id ? {...p, postponed: !p.postponed} : p))} 
-                            />
-                          ))}
+                          <h4 className="text-xs font-black text-slate-400 pr-3">{day}</h4>
+                          {dayS.map(l => <LectureCard key={l.id} lecture={l} onEdit={()=>{}} onDelete={()=>{}} onTogglePostponed={()=>{}} />)}
                        </div>
                      );
                    })}
                 </div>
-             ) : view === 'homework' ? (
-                <div className="space-y-8 px-2">
-                  <div className="flex justify-between items-center">
-                    <h3 className="text-2xl font-black dark:text-white">الواجبات والمهام</h3>
-                    <button onClick={() => setIsAddHomeworkModalOpen(true)} className="p-4 bg-emerald-600 text-white rounded-2xl shadow-xl hover:scale-110 active:scale-95 transition-all">{ICONS.Plus}</button>
-                  </div>
-                  <div className="space-y-4">
-                     {studentHomeworks.length === 0 ? (
-                        <div className="p-16 text-center bg-white dark:bg-slate-900 rounded-[2.5rem] border-2 border-dashed border-slate-100 dark:border-slate-800">
-                             <p className="text-slate-400 font-bold">كل المهام منجزة! أضف واجباً جديداً.</p>
-                        </div>
-                     ) : (
-                        studentHomeworks.map(h => (
-                           <HomeworkItem 
-                             key={h.id} homework={h} 
-                             onToggle={(id) => setStudentHomeworks(prev => prev.map(p => p.id === id ? {...p, completed: !p.completed} : p))} 
-                             onDelete={(id) => setStudentHomeworks(prev => prev.filter(p => p.id !== id))} 
-                           />
-                        ))
-                     )}
-                  </div>
-               </div>
              ) : (
                 <div className="space-y-8 px-2">
-                    <h3 className="text-2xl font-black dark:text-white">نتائجي ودرجاتي</h3>
-                    <div className="space-y-4">
-                        {myResults.length === 0 ? (
-                            <div className="p-16 text-center bg-white dark:bg-slate-900 rounded-[2.5rem] border-2 border-dashed border-slate-100 dark:border-slate-800">
-                                <p className="text-slate-400 font-bold">لا توجد نتائج حالياً.</p>
+                   <h3 className="text-2xl font-black dark:text-white">نتائجي ودرجاتي</h3>
+                   {myResults.length === 0 ? (
+                        <div className="p-16 text-center bg-white dark:bg-slate-900 rounded-[2.5rem] border-2 border-dashed border-slate-100 dark:border-slate-800 text-slate-400 font-bold">لا يوجد نتائج حالياً.</div>
+                   ) : (
+                        myResults.map((r, i) => (
+                        <div key={i} className="bg-white dark:bg-slate-900 p-6 rounded-[2.2rem] border border-slate-100 dark:border-slate-800 flex justify-between items-center shadow-sm">
+                            <div>
+                                <h4 className="font-black dark:text-white">{r.examTitle}</h4>
+                                <p className="text-[10px] text-slate-400">{r.groupName} | {r.date}</p>
                             </div>
-                        ) : (
-                            myResults.map((r, i) => (
-                                <div key={i} className="bg-white dark:bg-slate-900 p-6 rounded-[2.2rem] border border-slate-100 dark:border-slate-800 flex justify-between items-center shadow-sm hover:shadow-md transition-all">
-                                    <div>
-                                        <h4 className="font-black dark:text-white mb-1">{r.examTitle}</h4>
-                                        <p className="text-[10px] text-slate-400 font-bold uppercase">{r.groupName} | {r.date}</p>
-                                    </div>
-                                    <div className="text-right">
-                                        <div className="text-2xl font-black text-indigo-600 leading-none">{r.grade} <span className="text-xs text-slate-300">/ {r.maxGrade}</span></div>
-                                        <span className={`text-[9px] font-black px-2 py-0.5 rounded-lg inline-block mt-1 ${r.status === 'present' ? 'bg-emerald-50 text-emerald-600' : 'bg-rose-50 text-rose-600'}`}>{r.status === 'present' ? 'حاضر' : 'غائب'}</span>
-                                    </div>
-                                </div>
-                            ))
-                        )}
-                    </div>
+                            <div className="text-2xl font-black text-indigo-600">{r.grade} <span className="text-xs text-slate-300">/ {r.maxGrade}</span></div>
+                        </div>
+                        ))
+                   )}
                 </div>
              )}
           </div>
@@ -570,22 +510,22 @@ const App: React.FC = () => {
                 <button onClick={() => setView('details')} className="p-3 bg-white dark:bg-slate-800 rounded-2xl rotate-180 text-slate-400 shadow-sm">{ICONS.ChevronLeft}</button>
                 <h3 className="text-2xl font-black text-indigo-600">{selectedExam.title}</h3>
              </div>
-             <div className="bg-white dark:bg-slate-900 rounded-[2.5rem] border border-slate-100 dark:border-slate-800 overflow-hidden shadow-sm mx-2">
+             <div className="bg-white dark:bg-slate-900 rounded-[2.5rem] border border-slate-100 dark:border-slate-800 overflow-hidden shadow-sm">
                 {activeGroup?.students.map((s, idx) => {
                   const res = selectedExam.results[s.id];
                   return (
-                    <div key={s.id} className="p-6 flex flex-col sm:flex-row items-center justify-between gap-4 border-b last:border-0 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
-                       <div className="flex items-center gap-4 w-full sm:w-auto">
+                    <div key={s.id} className="p-6 flex flex-col sm:flex-row items-center justify-between gap-4 border-b last:border-0 dark:border-slate-800">
+                       <div className="flex items-center gap-4">
                           <div className="w-10 h-10 rounded-xl flex items-center justify-center font-black bg-slate-50 dark:bg-slate-800 text-slate-400 text-xs">#{idx+1}</div>
                           <h6 className="font-black dark:text-white">{s.name}</h6>
                        </div>
-                       <div className="flex items-center gap-4 w-full sm:w-auto">
+                       <div className="flex items-center gap-4">
                          <div className="flex bg-slate-100 dark:bg-slate-800 p-1 rounded-2xl">
                            <button onClick={() => updateGrade(selectedExam.id, s.id, res?.grade || 0, 'present')} className={`px-4 py-2 rounded-xl text-[10px] font-black transition-all ${res?.status === 'present' ? 'bg-white shadow-sm text-indigo-600' : 'text-slate-400'}`}>حاضر</button>
                            <button onClick={() => updateGrade(selectedExam.id, s.id, 0, 'absent')} className={`px-4 py-2 rounded-xl text-[10px] font-black transition-all ${res?.status === 'absent' ? 'bg-rose-500 text-white shadow-lg' : 'text-slate-400'}`}>غائب</button>
                            <button onClick={() => updateGrade(selectedExam.id, s.id, 0, 'excused')} className={`px-4 py-2 rounded-xl text-[10px] font-black transition-all ${res?.status === 'excused' ? 'bg-amber-500 text-white shadow-lg' : 'text-slate-400'}`}>مجاز</button>
                          </div>
-                         {res?.status === 'present' && <input type="number" className="w-20 field !py-2.5 !px-4 text-center ltr-input" placeholder="الدرجة" value={res?.grade || ''} onChange={e => updateGrade(selectedExam.id, s.id, parseInt(e.target.value) || 0, 'present')} />}
+                         {res?.status === 'present' && <input type="number" max="100" className="w-20 field !py-2.5 !px-4 text-center ltr-input" placeholder="الدرجة" value={res?.grade || ''} onChange={e => updateGrade(selectedExam.id, s.id, Math.min(parseInt(e.target.value) || 0, 100), 'present')} />}
                        </div>
                     </div>
                   );
@@ -595,170 +535,159 @@ const App: React.FC = () => {
         )}
       </main>
 
-      {/* --- Modals (All Integrated) --- */}
+      {/* --- Modals --- */}
       
-      {/* Teacher: New Group */}
-      <Modal isOpen={isGroupModalOpen} onClose={() => setIsGroupModalOpen(false)} title="إنشاء مجموعة جديدة">
-         <div className="space-y-4">
-            <input type="text" placeholder="اسم المجموعة" className="field" value={newGroupName} onChange={e => setNewGroupName(e.target.value)} />
-            <input type="text" placeholder="الموقع / السنتر" className="field" value={newGroupLocation} onChange={e => setNewGroupLocation(e.target.value)} />
-            <button onClick={handleAddGroup} className="w-full py-5 bg-indigo-600 text-white rounded-[2rem] font-black shadow-lg">حفظ</button>
-         </div>
-      </Modal>
-
-      {/* Teacher: Add Student */}
-      <Modal isOpen={isStudentModalOpen} onClose={() => setIsStudentModalOpen(false)} title="إضافة طالب للمجموعة">
-         <div className="space-y-4">
-            <input type="text" placeholder="اسم الطالب" className="field" value={newStudentName} onChange={e => setNewStudentName(e.target.value)} />
-            <input type="text" placeholder="اسم المستخدم (English)" className="field ltr-input" value={newStudentUsername} onChange={e => setNewStudentUsername(e.target.value)} />
-            <p className="text-[10px] text-slate-400 font-bold text-center">ملاحظة: يجب أن يكون الطالب مسجلاً في المنصة مسبقاً.</p>
-            <button disabled={isSyncing} onClick={handleAddStudent} className="w-full py-5 bg-indigo-600 text-white rounded-[2rem] font-black shadow-lg flex items-center justify-center gap-2">
-                {isSyncing ? <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"></div> : 'ربط الطالب'}
-            </button>
-         </div>
-      </Modal>
-
-      {/* Teacher: Student Info */}
+      {/* Student Details with Exam History */}
       <Modal isOpen={!!selectedStudentId} onClose={() => setSelectedStudentId(null)} title="بيانات الطالب">
          {selectedStudent && (
-           <div className="space-y-8">
-              <div className="flex items-center gap-6">
-                 <div className="w-24 h-24 bg-slate-50 dark:bg-slate-800 rounded-[2rem] flex items-center justify-center text-4xl text-indigo-600 border-2 border-indigo-100">{ICONS.User}</div>
+           <div className="space-y-6">
+              <div className="flex items-center gap-6 p-4 bg-indigo-50/50 dark:bg-indigo-900/10 rounded-[2rem] border border-indigo-100 dark:border-indigo-900/30">
+                 <div className="w-20 h-20 bg-white dark:bg-slate-800 rounded-3xl flex items-center justify-center text-3xl text-indigo-600 border-2 border-indigo-100 dark:border-indigo-800 shadow-sm">{ICONS.User}</div>
                  <div className="flex-1">
-                    <h3 className="text-2xl font-black dark:text-white mb-2">{selectedStudent.name}</h3>
+                    <h3 className="text-xl font-black dark:text-white mb-2">{selectedStudent.name}</h3>
                     <div className="flex gap-2">
-                       <button onClick={() => toggleStar(selectedStudent.id)} className={`p-3 rounded-2xl transition-all ${selectedStudent.starred ? 'bg-amber-100 text-amber-600' : 'bg-slate-50 dark:bg-slate-800 text-slate-400'}`}>{ICONS.Star}</button>
-                       <button onClick={() => { setTempNote(selectedStudent.notes || ''); setIsNoteModalOpen(true); }} className="p-3 rounded-2xl bg-indigo-50 text-indigo-600">{ICONS.Notes}</button>
+                       <button onClick={handleEditStudentName} className="p-2.5 rounded-xl bg-white dark:bg-slate-800 text-slate-500 hover:text-indigo-600 transition-all border border-slate-100 dark:border-slate-700 shadow-sm">{ICONS.Edit}</button>
+                       <button onClick={() => { setTempNote(selectedStudent.notes || ''); setIsNoteModalOpen(true); }} className="p-2.5 rounded-xl bg-indigo-600 text-white shadow-lg">{ICONS.Notes}</button>
                     </div>
                  </div>
               </div>
+
               <div className="grid grid-cols-2 gap-3">
                  {(() => {
                     const stats = getStudentStats(selectedStudent.id);
                     return (<>
-                      <div className="bg-indigo-50 p-4 rounded-3xl text-center"><div className="text-lg font-black text-indigo-600">{stats.present}</div><div className="text-[10px] font-black text-indigo-400">حضور</div></div>
-                      <div className="bg-rose-50 p-4 rounded-3xl text-center"><div className="text-lg font-black text-rose-600">{stats.absent}</div><div className="text-[10px] font-black text-rose-400">غياب</div></div>
+                      <div className="bg-emerald-50 dark:bg-emerald-900/10 p-4 rounded-3xl text-center border border-emerald-100 dark:border-emerald-900/30"><div className="text-lg font-black text-emerald-600">{stats.present}</div><div className="text-[10px] font-black text-emerald-400">حضور</div></div>
+                      <div className="bg-rose-50 dark:bg-rose-900/10 p-4 rounded-3xl text-center border border-rose-100 dark:border-rose-900/30"><div className="text-lg font-black text-rose-600">{stats.absent}</div><div className="text-[10px] font-black text-rose-400">غياب</div></div>
                     </>);
                  })()}
               </div>
-              <button onClick={() => { setItemToDelete({id: selectedStudent.id, type: 'student'}); setIsConfirmDeleteOpen(true); setSelectedStudentId(null); }} className="w-full py-5 bg-rose-50 text-rose-600 rounded-[2rem] font-black">حذف الطالب من المجموعة</button>
+
+              <div className="space-y-3">
+                <p className="text-[10px] font-black text-slate-400 uppercase pr-2">سجل الامتحانات</p>
+                {studentExamHistory.length === 0 ? (
+                  <div className="p-8 text-center bg-slate-50 dark:bg-slate-800 rounded-3xl text-slate-400 text-xs font-bold border border-slate-100 dark:border-slate-700">لا توجد سجلات بعد</div>
+                ) : (
+                  <div className="max-h-48 overflow-y-auto space-y-2 custom-scrollbar">
+                    {studentExamHistory.map((h, idx) => (
+                      <div key={idx} className="p-4 bg-white dark:bg-slate-800 rounded-2xl border border-slate-100 dark:border-slate-700 flex justify-between items-center shadow-sm">
+                        <div>
+                          <p className="font-black text-sm dark:text-white">{h.title}</p>
+                          <p className="text-[9px] text-slate-400">{h.date}</p>
+                        </div>
+                        <div className={`px-3 py-1 rounded-lg text-xs font-black ${h.result?.status === 'present' ? 'text-indigo-600 bg-indigo-50 dark:bg-indigo-900/20' : 'text-rose-500 bg-rose-50'}`}>
+                          {h.result?.status === 'present' ? `${h.result.grade}/${h.maxGrade}` : 'غائب'}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              <button onClick={() => { setItemToDelete({id: selectedStudent.id, type: 'student'}); setIsConfirmDeleteOpen(true); setSelectedStudentId(null); }} className="w-full py-5 bg-rose-50 text-rose-600 rounded-[2rem] font-black text-sm hover:bg-rose-100 transition-all">حذف الطالب من المجموعة</button>
            </div>
          )}
       </Modal>
 
-      {/* Teacher: Student Notes */}
-      <Modal isOpen={isNoteModalOpen} onClose={() => setIsNoteModalOpen(false)} title="ملاحظات المدرس">
-         <div className="space-y-4">
-            <textarea className="field h-40 resize-none !rounded-[2.5rem]" placeholder="اكتب ملاحظاتك عن هذا الطالب..." value={tempNote} onChange={e => setTempNote(e.target.value)} />
-            <button onClick={async () => {
-                if (!activeGroup || !selectedStudentId) return;
-                const updated = activeGroup.students.map(s => s.id === selectedStudentId ? { ...s, notes: tempNote } : s);
-                await updateDoc(doc(db, "groups", activeGroup.id), { students: updated });
-                setIsNoteModalOpen(false);
-                showToast('تم حفظ الملاحظة', 'success');
-            }} className="w-full py-5 bg-indigo-600 text-white rounded-[2rem] font-black shadow-lg">حفظ الملاحظة</button>
-         </div>
-      </Modal>
-
-      {/* Teacher: New Exam */}
-      <Modal isOpen={isExamModalOpen} onClose={() => setIsExamModalOpen(false)} title="إنشاء امتحان جديد">
+      <Modal isOpen={isExamModalOpen} onClose={() => setIsExamModalOpen(false)} title="امتحان جديد">
          <div className="space-y-4">
             <input type="text" placeholder="عنوان الامتحان" className="field" value={newExamTitle} onChange={e => setNewExamTitle(e.target.value)} />
-            <input type="number" placeholder="الدرجة القصوى" className="field" value={newExamMaxGrade} onChange={e => setNewExamMaxGrade(parseInt(e.target.value))} />
-            <button onClick={handleAddExam} className="w-full py-5 bg-indigo-600 text-white rounded-[2rem] font-black shadow-lg">إنشاء</button>
+            <input type="number" placeholder="الدرجة القصوى" className="field" max="100" value={newExamMaxGrade} onChange={e => setNewExamMaxGrade(Math.min(parseInt(e.target.value) || 0, 100))} />
+            <select className="field appearance-none" value={newExamType} onChange={e => setNewExamType(e.target.value as any)}>
+               <option value="daily">امتحان يومي</option>
+               <option value="semester">امتحان فصلي</option>
+            </select>
+            <button onClick={handleAddExam} className="w-full py-5 bg-indigo-600 text-white rounded-[2rem] font-black shadow-lg">حفظ الامتحان</button>
          </div>
       </Modal>
 
-      {/* Teacher: Group Schedule */}
-      <Modal isOpen={isAddGroupScheduleModalOpen} onClose={() => setIsAddGroupScheduleModalOpen(false)} title="إضافة موعد للمجموعة">
+      <Modal isOpen={isGroupModalOpen} onClose={() => setIsGroupModalOpen(false)} title="مجموعة جديدة">
          <div className="space-y-4">
-            <select className="field appearance-none" value={newGSched.day} onChange={e => setNewGSched({...newGSched, day: e.target.value as DayOfWeek})}>
-               {DAYS.map(d => <option key={d} value={d}>{d}</option>)}
-            </select>
-            <input type="time" className="field" value={newGSched.time} onChange={e => setNewGSched({...newGSched, time: e.target.value})} />
-            <button onClick={handleAddGroupSchedule} className="w-full py-5 bg-indigo-600 text-white rounded-[2rem] font-black shadow-lg">إضافة الموعد</button>
+            <input type="text" placeholder="اسم المجموعة" className="field" value={newGroupName} onChange={e => setNewGroupName(e.target.value)} />
+            <input type="text" placeholder="الموقع" className="field" value={newGroupLocation} onChange={e => setNewGroupLocation(e.target.value)} />
+            <button onClick={handleAddGroup} className="w-full py-5 bg-indigo-600 text-white rounded-[2rem] font-black shadow-lg">حفظ</button>
          </div>
       </Modal>
 
-      {/* Student: Personal Lecture */}
-      <Modal isOpen={isAddLectureModalOpen} onClose={() => setIsAddLectureModalOpen(false)} title="إضافة حصة للجدول">
+      <Modal isOpen={isStudentModalOpen} onClose={() => setIsStudentModalOpen(false)} title="إضافة طالب">
          <div className="space-y-4">
-            <select className="field appearance-none" value={newHomeworkSubject} onChange={e => setNewHomeworkSubject(e.target.value)}>
-               {SUBJECTS.map(s => <option key={s} value={s}>{s}</option>)}
-            </select>
-            <select className="field appearance-none" value={newGSched.day} onChange={e => setNewGSched({...newGSched, day: e.target.value as DayOfWeek})}>
-               {DAYS.map(d => <option key={d} value={d}>{d}</option>)}
-            </select>
-            <input type="time" className="field" value={newGSched.time} onChange={e => setNewGSched({...newGSched, time: e.target.value})} />
-            <button onClick={handleAddPersonalLecture} className="w-full py-5 bg-indigo-600 text-white rounded-[2rem] font-black shadow-lg">حفظ الحصة</button>
+            <input type="text" placeholder="اسم الطالب" className="field" value={newStudentName} onChange={e => setNewStudentName(e.target.value)} />
+            <input type="text" placeholder="يوزر الطالب (English)" className="field ltr-input" value={newStudentUsername} onChange={e => setNewStudentUsername(e.target.value.toLowerCase())} />
+            <button disabled={isSyncing} onClick={handleAddStudent} className="w-full py-5 bg-indigo-600 text-white rounded-[2rem] font-black shadow-lg">ربط الطالب</button>
          </div>
       </Modal>
 
-      {/* Student: Personal Homework */}
-      <Modal isOpen={isAddHomeworkModalOpen} onClose={() => setIsAddHomeworkModalOpen(false)} title="إضافة واجب جديد">
-         <div className="space-y-4">
-            <select className="field appearance-none" value={newHomeworkSubject} onChange={e => setNewHomeworkSubject(e.target.value)}>
-               {SUBJECTS.map(s => <option key={s} value={s}>{s}</option>)}
-            </select>
-            <textarea placeholder="ما هو الواجب المطلوب؟" className="field min-h-[120px] resize-none !rounded-[2rem]" value={newHomeworkTask} onChange={e => setNewHomeworkTask(e.target.value)} />
-            <button onClick={handleAddPersonalHomework} className="w-full py-5 bg-emerald-600 text-white rounded-[2rem] font-black shadow-lg">إضافة المهمة</button>
-         </div>
-      </Modal>
-
-      {/* Global Settings */}
       <Modal isOpen={isSettingsOpen} onClose={() => setIsSettingsOpen(false)} title="الإعدادات">
          <div className="space-y-6">
-            <button onClick={async () => { 
-                 const newMode = !config.darkMode; setConfig({...config, darkMode: newMode});
-                 if (auth.currentUser) await updateDoc(doc(db, "users", auth.currentUser.uid), { darkMode: newMode });
-                 document.documentElement.classList.toggle('dark');
-               }} className="w-full p-5 bg-slate-50 dark:bg-slate-800 rounded-3xl flex justify-between items-center font-black">
-                  <span className="dark:text-white">الوضع الليلي</span>
-                  <div className={`p-2 rounded-xl ${config.darkMode ? 'bg-indigo-600 text-white' : 'bg-amber-100 text-amber-600'}`}>
-                    {config.darkMode ? ICONS.Sun : ICONS.Moon}
-                  </div>
-            </button>
-            <button onClick={async () => { await signOut(auth); window.location.reload(); }} className="w-full p-5 bg-rose-50 text-rose-600 rounded-3xl flex justify-between items-center font-black hover:bg-rose-100 transition-all">
-                <span>تسجيل الخروج</span>
-                {ICONS.LogOut}
-            </button>
-         </div>
-      </Modal>
+            <div className="flex flex-col items-center gap-4 py-4 border-b border-slate-100 dark:border-slate-800">
+                <div className="relative group">
+                    <div className="w-24 h-24 rounded-[2rem] bg-indigo-100 dark:bg-indigo-900/20 overflow-hidden border-4 border-white dark:border-slate-800 shadow-xl flex items-center justify-center text-indigo-600">
+                        {config.profileImage ? <img src={config.profileImage} className="w-full h-full object-cover" /> : <div className="scale-150">{ICONS.User}</div>}
+                    </div>
+                    <label className="absolute -bottom-2 -right-2 p-3 bg-indigo-600 text-white rounded-2xl shadow-xl cursor-pointer hover:scale-110 active:scale-95 transition-all">
+                        {ICONS.Camera}
+                        <input type="file" className="hidden" accept="image/*" onChange={handleProfilePicChange} />
+                    </label>
+                </div>
+                <div className="text-center">
+                    <button onClick={handleUpdateName} className="font-black text-slate-800 dark:text-white flex items-center gap-2 hover:text-indigo-600">
+                        {config.name} {ICONS.Edit}
+                    </button>
+                    <p className="text-[10px] text-slate-400 font-bold uppercase">@{config.username}</p>
+                </div>
+            </div>
 
-      {/* Global Delete Confirmation */}
-      <Modal isOpen={isConfirmDeleteOpen} onClose={() => setIsConfirmDeleteOpen(false)} title="تأكيد الحذف">
-         <div className="space-y-6 text-center">
-            <div className="w-20 h-20 bg-rose-50 text-rose-500 rounded-full flex items-center justify-center mx-auto text-3xl">{ICONS.Trash}</div>
-            <h4 className="text-xl font-black dark:text-white tracking-tighter">هل أنت متأكد من الحذف؟</h4>
-            <div className="flex gap-4">
-               <button onClick={() => setIsConfirmDeleteOpen(false)} className="flex-1 py-5 bg-slate-50 dark:bg-slate-800 text-slate-500 rounded-[1.8rem] font-black">إلغاء</button>
-               <button onClick={confirmDelete} className="flex-1 py-5 bg-rose-600 text-white rounded-[1.8rem] font-black shadow-lg">تأكيد</button>
+            <div className="space-y-3">
+                <button onClick={async () => { 
+                     const newMode = !config.darkMode; setConfig({...config, darkMode: newMode});
+                     if (auth.currentUser) await updateDoc(doc(db, "users", auth.currentUser.uid), { darkMode: newMode });
+                     document.documentElement.classList.toggle('dark');
+                   }} className="w-full p-5 bg-slate-50 dark:bg-slate-800 rounded-3xl flex justify-between items-center font-black">
+                      <span className="dark:text-white">الوضع الليلي</span>{config.darkMode ? ICONS.Sun : ICONS.Moon}
+                </button>
+                
+                <div className="pt-4 space-y-4">
+                    <p className="text-[10px] font-black text-slate-400 uppercase px-2 tracking-widest">التواصل مع الاستاذ</p>
+                    <button onClick={() => window.open('https://wa.me/9647715729997')} className="w-full p-5 bg-emerald-50 text-emerald-600 rounded-3xl flex justify-between items-center font-black hover:bg-emerald-100 transition-all">
+                        <span>واتساب الاستاذ</span>
+                        {ICONS.WhatsApp}
+                    </button>
+                    
+                    <p className="text-[10px] font-black text-slate-400 uppercase px-2 tracking-widest mt-4">قسم المدرس - المطور</p>
+                    <button onClick={() => window.open('https://instagram.com/8o7y')} className="w-full p-5 bg-indigo-50 text-indigo-600 rounded-3xl flex justify-between items-center font-black hover:bg-indigo-100 transition-all">
+                        <span>التواصل مع المطور</span>
+                        {ICONS.Instagram}
+                    </button>
+                </div>
+
+                <button onClick={handleSignOut} className="w-full p-5 bg-rose-50 text-rose-600 rounded-3xl flex justify-between items-center font-black mt-8 hover:bg-rose-100 transition-all">
+                    <span>تسجيل الخروج</span>
+                    {ICONS.LogOut}
+                </button>
             </div>
          </div>
       </Modal>
 
-      {/* Bottom Navigation */}
+      <Modal isOpen={isConfirmDeleteOpen} onClose={() => setIsConfirmDeleteOpen(false)} title="تأكيد الحذف">
+         <div className="space-y-6 text-center">
+            <div className="w-20 h-20 bg-rose-50 text-rose-500 rounded-full flex items-center justify-center mx-auto text-3xl shadow-sm">{ICONS.Trash}</div>
+            <h4 className="text-xl font-black dark:text-white tracking-tighter">هل أنت متأكد من الحذف؟</h4>
+            <div className="flex gap-4">
+               <button onClick={() => setIsConfirmDeleteOpen(false)} className="flex-1 py-5 bg-slate-50 dark:bg-slate-800 text-slate-500 rounded-[1.8rem] font-black transition-all active:scale-95">إلغاء</button>
+               <button onClick={confirmDelete} className="flex-1 py-5 bg-rose-600 text-white rounded-[1.8rem] font-black shadow-lg shadow-rose-500/20 transition-all active:scale-95">تأكيد</button>
+            </div>
+         </div>
+      </Modal>
+
       <nav className="fixed bottom-8 left-8 right-8 bg-white/90 dark:bg-slate-900/90 backdrop-blur-xl border border-slate-100 dark:border-slate-800 p-3 rounded-[3rem] shadow-2xl flex justify-around items-center z-50 transition-all duration-500">
         {config.role === 'teacher' ? (
           <>
-            <button onClick={() => setView('dashboard')} className={`flex-1 flex flex-col items-center gap-1 py-4 rounded-[2.5rem] transition-all ${view === 'dashboard' ? 'bg-indigo-600 text-white shadow-xl scale-105' : 'text-slate-400'}`}>
-                {ICONS.Users} <span className="text-[10px] font-black uppercase tracking-widest">المجموعات</span>
-            </button>
-            <button onClick={() => setView('teacher-weekly')} className={`flex-1 flex flex-col items-center gap-1 py-4 rounded-[2.5rem] transition-all ${view === 'teacher-weekly' ? 'bg-indigo-900 text-white shadow-xl scale-105' : 'text-slate-400'}`}>
-                {ICONS.Calendar} <span className="text-[10px] font-black uppercase tracking-widest">الجدول</span>
-            </button>
+            <button onClick={() => setView('dashboard')} className={`flex-1 flex flex-col items-center gap-1 py-4 rounded-[2.5rem] transition-all ${view === 'dashboard' ? 'bg-indigo-600 text-white shadow-xl scale-105' : 'text-slate-400'}`}>{ICONS.Users} <span className="text-[10px] font-black uppercase">المجموعات</span></button>
+            <button onClick={() => setView('teacher-weekly')} className={`flex-1 flex flex-col items-center gap-1 py-4 rounded-[2.5rem] transition-all ${view === 'teacher-weekly' ? 'bg-indigo-900 text-white shadow-xl' : 'text-slate-400'}`}>{ICONS.Calendar} <span className="text-[10px] font-black uppercase">الجدول</span></button>
           </>
         ) : (
           <>
-            <button onClick={() => setView('schedule')} className={`flex-1 flex flex-col items-center gap-1 py-4 rounded-[2.5rem] transition-all ${view === 'schedule' ? 'bg-indigo-600 text-white shadow-xl scale-105' : 'text-slate-400'}`}>
-                {ICONS.Calendar} <span className="text-[10px] font-black uppercase tracking-widest">الجدول</span>
-            </button>
-            <button onClick={() => setView('homework')} className={`flex-1 flex flex-col items-center gap-1 py-4 rounded-[2.5rem] transition-all ${view === 'homework' ? 'bg-emerald-600 text-white shadow-xl scale-105' : 'text-slate-400'}`}>
-                {ICONS.CheckSquare} <span className="text-[10px] font-black uppercase tracking-widest">الواجبات</span>
-            </button>
-            <button onClick={() => setView('student-results')} className={`flex-1 flex flex-col items-center gap-1 py-4 rounded-[2.5rem] transition-all ${view === 'student-results' ? 'bg-amber-600 text-white shadow-xl scale-105' : 'text-slate-400'}`}>
-                {ICONS.ClipboardList} <span className="text-[10px] font-black uppercase tracking-widest">النتائج</span>
-            </button>
+            <button onClick={() => setView('schedule')} className={`flex-1 flex flex-col items-center gap-1 py-4 rounded-[2.5rem] transition-all ${view === 'schedule' ? 'bg-indigo-600 text-white shadow-xl scale-105' : 'text-slate-400'}`}>{ICONS.Calendar} <span className="text-[10px] font-black uppercase">الجدول</span></button>
+            <button onClick={() => setView('student-results')} className={`flex-1 flex flex-col items-center gap-1 py-4 rounded-[2.5rem] transition-all ${view === 'student-results' ? 'bg-amber-600 text-white shadow-xl scale-105' : 'text-slate-400'}`}>{ICONS.ClipboardList} <span className="text-[10px] font-black uppercase">النتائج</span></button>
           </>
         )}
       </nav>
@@ -772,6 +701,8 @@ const App: React.FC = () => {
         .ltr-input { direction: ltr; text-align: left; }
         .animate-slide-in { animation: slide-in 0.4s ease-out; }
         @keyframes slide-in { from { transform: translateY(10px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+        .login-bg { background-image: radial-gradient(circle at 2px 2px, #f1f5f9 1px, transparent 0); background-size: 24px 24px; }
+        .dark .login-bg { background-image: radial-gradient(circle at 2px 2px, #1e293b 1px, transparent 0); }
       `}</style>
     </div>
   );
