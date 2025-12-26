@@ -1,7 +1,7 @@
 
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
-import { getAuth, setPersistence, indexedDBLocalPersistence } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
-import { getFirestore, enableIndexedDbPersistence } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+import { getAuth } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
+import { getFirestore } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 
 export const firebaseConfig = {
   apiKey: "AIzaSyAZJqiBkw2wlaGlftaWTAHpyQLT5zk4gNI",
@@ -13,21 +13,8 @@ export const firebaseConfig = {
   measurementId: "G-BQV883ED13"
 };
 
+// تهيئة التطبيق مرة واحدة فقط
 const app = initializeApp(firebaseConfig);
 export const auth = getAuth(app);
-
-// تفعيل حفظ الجلسة لتبقى نشطة حتى بدون إنترنت
-setPersistence(auth, indexedDBLocalPersistence).catch(err => console.log("Persistence error", err));
-
 export const db = getFirestore(app);
-
-// تفعيل العمل بدون إنترنت للبيانات
-enableIndexedDbPersistence(db).catch((err) => {
-    if (err.code == 'failed-precondition') {
-        console.log("Persistence failed: multiple tabs open");
-    } else if (err.code == 'unimplemented') {
-        console.log("Persistence is not supported by this browser");
-    }
-});
-
 export default app;

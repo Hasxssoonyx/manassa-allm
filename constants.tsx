@@ -28,10 +28,7 @@ import {
   Sun,
   Camera,
   User,
-  CheckSquare,
-  Instagram,
-  MessageCircle,
-  Edit2
+  CheckSquare
 } from 'lucide-react';
 
 export const ICONS = {
@@ -53,8 +50,10 @@ export const ICONS = {
   ChevronLeft: <ChevronLeft size={20} />,
   Search: <Search size={20} />,
   Exams: <ClipboardList size={20} />,
+  // Added ClipboardList to ICONS to match usage in App.tsx (Line 416)
   ClipboardList: <ClipboardList size={20} />,
   Grades: <GraduationCap size={20} />,
+  // Added GraduationCap to ICONS to match usage in App.tsx (Line 148)
   GraduationCap: <GraduationCap size={20} />,
   Notes: <MessageSquare size={16} />,
   Present: <UserCheck size={16} />,
@@ -64,10 +63,7 @@ export const ICONS = {
   Moon: <Moon size={20} />,
   Sun: <Sun size={20} />,
   Camera: <Camera size={18} />,
-  User: <User size={40} />,
-  Instagram: <Instagram size={18} />,
-  WhatsApp: <MessageCircle size={18} />,
-  Edit: <Edit2 size={16} />
+  User: <User size={40} />
 };
 
 export const SUBJECT_COLORS: Record<string, { bg: string; text: string; border: string; icon: string }> = {
