@@ -1,8 +1,8 @@
+import { initializeApp } from "firebase/app";
+import { getAuth, setPersistence, indexedDBLocalPersistence } from "firebase/auth";
+import { getFirestore, enableIndexedDbPersistence } from "firebase/firestore";
 
-import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
-import { getAuth } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
-import { getFirestore } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
-
+// إعدادات Firebase الخاصة بك
 export const firebaseConfig = {
   apiKey: "AIzaSyAZJqiBkw2wlaGlftaWTAHpyQLT5zk4gNI",
   authDomain: "manasa-allm.firebaseapp.com",
@@ -13,31 +13,23 @@ export const firebaseConfig = {
   measurementId: "G-BQV883ED13"
 };
 
-// تهيئة التطبيق مرة واحدة فقط
+// تهيئة التطبيق
 const app = initializeApp(firebaseConfig);
+
+// 1. إعداد Auth ليحفظ بيانات الدخول حتى عند إغلاق الإنترنت
 export const auth = getAuth(app);
+setPersistence(auth, indexedDBLocalPersistence).catch((err) => {
+    console.error("خطأ في تفعيل حفظ جلسة الدخول:", err);
+});
+
+// 2. إعداد Firestore ليحفظ الجداول والبيانات أوفلاين
 export const db = getFirestore(app);
-export default app;
-import { initializeApp } from "firebase/app";
-import { getAuth } from "firebase/auth";
-// 1. أضف هذه الاستيرادات في الأعلى
-import { getFirestore, enableIndexedDbPersistence } from "firebase/firestore";
-
-const firebaseConfig = {
-  // بياناتك السرية موجودة هنا لا تغيرها
-};
-
-const app = initializeApp(firebaseConfig);
-const auth = getAuth(app);
-const db = getFirestore(app); // تعريف قاعدة البيانات
-
-// 2. أضف هذا الجزء لتفعيل خاصية "الأوفلاين"
 enableIndexedDbPersistence(db).catch((err) => {
     if (err.code == 'failed-precondition') {
         console.log("التخزين مفعّل في تبويب آخر");
     } else if (err.code == 'unimplemented') {
-        console.log("المتصفح لا يدعم التخزين");
+        console.log("المتصفح لا يدعم التخزين في هذا الجهاز");
     }
 });
 
-export { auth, db };
+export default app;
