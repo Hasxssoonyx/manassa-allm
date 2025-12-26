@@ -18,3 +18,26 @@ const app = initializeApp(firebaseConfig);
 export const auth = getAuth(app);
 export const db = getFirestore(app);
 export default app;
+import { initializeApp } from "firebase/app";
+import { getAuth } from "firebase/auth";
+// 1. أضف هذه الاستيرادات في الأعلى
+import { getFirestore, enableIndexedDbPersistence } from "firebase/firestore";
+
+const firebaseConfig = {
+  // بياناتك السرية موجودة هنا لا تغيرها
+};
+
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const db = getFirestore(app); // تعريف قاعدة البيانات
+
+// 2. أضف هذا الجزء لتفعيل خاصية "الأوفلاين"
+enableIndexedDbPersistence(db).catch((err) => {
+    if (err.code == 'failed-precondition') {
+        console.log("التخزين مفعّل في تبويب آخر");
+    } else if (err.code == 'unimplemented') {
+        console.log("المتصفح لا يدعم التخزين");
+    }
+});
+
+export { auth, db };
