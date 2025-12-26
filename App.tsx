@@ -11,11 +11,10 @@ import Modal from './components/Modal';
 import LectureCard from './components/LessonCard';
 import HomeworkItem from './components/HomeworkItem';
 import React, { useEffect, useState } from 'react';
-import { onAuthStateChanged, signOut } from "firebase/auth";
-import { doc, getDoc, collection, query, where, onSnapshot } from "firebase/firestore";
+import { onAuthStateChanged } from "firebase/auth";
+import { doc, getDoc } from "firebase/firestore";
 import { auth, db } from "./firebase";
-import { useNavigate } from "react-router-dom";
-
+import { useNavigate, Routes, Route } from "react-router-dom";
 // --- تجاوز مشكلة الـ reCAPTCHA برمجياً ---
 (window as any).FIREBASE_APPCHECK_DEBUG_TOKEN = true;
 
@@ -169,61 +168,76 @@ const App: React.FC = () => {
 
 
 
+// استورد صفحاتك هنا (تأكد من صحة الأسماء)
+// import Login from './pages/Login'; 
+
 const App: React.FC = () => {
   const navigate = useNavigate();
-  // إضافة حالة للتحميل لمنع التأخير والتوجيه الخاطئ
   const [loading, setLoading] = useState(true);
+  const [user, setUser] = useState<any>(null);
 
   useEffect(() => {
-    const unsub = onAuthStateChanged(auth, async (user) => {
-      try {
-        if (user) {
-          const docRef = doc(db, "users", user.uid);
-          // محاولة جلب البيانات (ستعمل أوفلاين لأننا فعلنا Persistence في firebase.ts)
+    // هذا المراقب يعمل فور فتح التطبيق
+    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+      setLoading(true); // ابدأ التحميل فوراً
+      
+      if (firebaseUser) {
+        try {
+          const docRef = doc(db, "users", firebaseUser.uid);
           const userDoc = await getDoc(docRef);
           
           if (userDoc.exists()) {
             const userData = userDoc.data();
-            // وضع الإعدادات الخاصة بك هنا (مثال)
-            if (userData.darkMode) document.documentElement.classList.add('dark');
+            setUser(userData);
             
-            // التوجيه فوراً بناءً على الدور
+            // التوجيه بناءً على الدور
             if (userData.role === 'teacher') {
-               navigate('/dashboard');
+              navigate('/dashboard', { replace: true });
             } else {
-               navigate('/schedule');
+              navigate('/schedule', { replace: true });
             }
-          } else if (navigator.onLine) {
-            await signOut(auth);
-            navigate('/selection');
           }
-        } else {
-          // إذا لم يوجد مستخدم أصلاً
-          navigate('/selection');
+        } catch (error) {
+          console.log("وضع الأوفلاين نشط");
+          // في حال الأوفلاين، لا نوجه لصفحة الدخول، نتركه يحاول تحميل الواجهة
         }
-      } catch (error) {
-        console.log("تعذر جلب البيانات، يعمل في وضع الأوفلاين");
-      } finally {
-        // انتهى الفحص، أغلق شاشة التحميل
-        setLoading(false);
+      } else {
+        // لا يوجد مستخدم نهائياً
+        navigate('/selection', { replace: true });
       }
+      
+      // تأخير بسيط جداً لضمان استقرار الواجهة قبل إخفاء التحميل
+      setTimeout(() => setLoading(false), 500);
     });
 
-    return () => unsub();
-  }, [navigate]);
+    return () => unsubscribe();
+  }, []);
 
-  // إذا كان التطبيق لا يزال يفحص الحالة، أظهر شاشة بيضاء أو علامة تحميل
+  // شاشة تحميل إجبارية تمنع ظهور أي صفحة أخرى قبل انتهاء الفحص
   if (loading) {
     return (
-      <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}>
-        <p>جاري التحميل...</p> 
+      <div style={{
+        height: '100vh',
+        display: 'flex',
+        flexDirection: 'column',
+        justifyContent: 'center',
+        alignItems: 'center',
+        backgroundColor: '#ffffff'
+      }}>
+        <div className="spinner"></div> {/* يمكنك إضافة CSS لهذا الـ Spinner */}
+        <h2 style={{ marginTop: '20px', color: '#333', fontFamily: 'Arial' }}>منصة عِلْم</h2>
+        <p>جاري التحقق من البيانات...</p>
       </div>
     );
   }
 
-  return null; // سيتم التوجيه بواسطة navigate
+  return (
+    <Routes>
+      {/* هنا تضع مساراتك، لكن navigate سيتولى التوجيه التلقائي */}
+      <Route path="/" element={<div>جاري التوجيه...</div>} />
+    </Routes>
+  );
 };
-  
   const handleAuth = async () => {
     if (!authUsername || !authPassword) return showToast('يرجى ملء الحقول', 'error');
     if (authUsername.length < 4 || authUsername.length > 12) return showToast('اسم المستخدم يجب أن يكون بين 4 و 12 حرفاً', 'error');
