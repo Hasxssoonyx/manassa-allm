@@ -63,7 +63,8 @@ export const ICONS = {
   Sun: <Sun size={20} />,
   Camera: <Camera size={18} />,
   User: <User size={40} />,
-  Edit: <Edit2 size={16} /> // Added Edit Icon
+  Edit: <Edit2 size={16} />,
+  ArrowRight: <ChevronLeft size={20} className="rotate-180" />
 };
 
 export const SUBJECT_COLORS: Record<string, { bg: string; text: string; border: string; icon: string }> = {

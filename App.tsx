@@ -78,8 +78,8 @@ const App: React.FC = () => {
   const [groupSearch, setGroupSearch] = useState('');
 
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
-  const [view, setView] = useState<'dashboard' | 'details' | 'schedule' | 'homework' | 'teacher-weekly' | 'student-results' | 'exam-grading'>('dashboard');
-  const [activeTab, setActiveTab] = useState<'students' | 'exams' | 'group-schedule'>('students');
+  const [view, setView] = useState<'dashboard' | 'details' | 'schedule' | 'homework' | 'teacher-weekly' | 'student-results' | 'exam-grading' | 'all-exams'>('dashboard');
+  const [activeTab, setActiveTab] = useState<'students' | 'group-schedule'>('students');
   const [activeGroupId, setActiveGroupId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
 
@@ -158,6 +158,53 @@ const App: React.FC = () => {
     });
     return stats;
   };
+
+              {/* All Exams List View */}
+              {view === 'all-exams' && activeGroup && (
+                <div className="min-h-screen bg-white dark:bg-slate-950 animate-slide-in p-6 pb-24">
+                  <div className="max-w-4xl mx-auto">
+                    <div className="flex items-center justify-between mb-8">
+                      <button onClick={() => setView('details')} className="p-3 bg-slate-100 dark:bg-slate-800 rounded-2xl dark:text-white">
+                        {ICONS.ArrowRight}
+                      </button>
+                      <h2 className="text-2xl font-black dark:text-white">امتحانات {activeGroup.name}</h2>
+                      <div className="flex gap-2">
+                        <div className="px-3 py-1 bg-indigo-50 dark:bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 rounded-full text-[10px] font-black uppercase">
+                          فصلية: {examCounts.semester}
+                        </div>
+                        <div className="px-3 py-1 bg-amber-50 dark:bg-amber-500/10 text-amber-600 dark:text-amber-400 rounded-full text-[10px] font-black uppercase">
+                          يومية: {examCounts.daily}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {activeGroup.exams.map(exam => (
+                        <div key={exam.id} onClick={() => { setSelectedExamId(exam.id); setView('exam-grading'); }} className="bg-slate-50 dark:bg-slate-900/50 p-5 rounded-[2rem] border border-slate-100 dark:border-slate-800 cursor-pointer hover:border-indigo-500 transition-all">
+                          <div className="flex justify-between items-start mb-4">
+                            <div>
+                              <span className={`px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest ${exam.type === 'semester' ? 'bg-indigo-600 text-white' : 'bg-amber-500 text-white'}`}>
+                                {exam.type === 'semester' ? 'فصلي' : 'يومي'}
+                              </span>
+                              <h3 className="text-lg font-black dark:text-white mt-2">{exam.title}</h3>
+                              <p className="text-[10px] text-slate-400 font-bold">{exam.date}</p>
+                            </div>
+                            <div className="text-indigo-600">{ICONS.ChevronLeft}</div>
+                          </div>
+                          <div className="flex justify-between items-center text-[11px] font-bold text-slate-500">
+                            <span>الدرجة القصوى: {exam.maxGrade}</span>
+                            <span>{Object.keys(exam.results).length} طلاب تم تقييمهم</span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                    
+                    <button onClick={() => setIsExamModalOpen(true)} className="fixed bottom-32 left-8 w-14 h-14 bg-indigo-600 text-white rounded-2xl shadow-2xl flex items-center justify-center hover:scale-110 active:scale-95 transition-all z-40">
+                      {ICONS.Plus}
+                    </button>
+                  </div>
+                </div>
+              )}
 
       {/* Exam Grading View */}
       {view === 'exam-grading' && selectedExam && activeGroup && (
