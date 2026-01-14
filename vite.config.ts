@@ -13,8 +13,9 @@ export default defineConfig(({ mode }) => {
     return {
       base: './', // هذا السطر هو الأهم لضمان عمل التطبيق بعد تحويله لـ APK
       server: {
-        port: 3000,
+        port: 5000,
         host: '0.0.0.0',
+        allowedHosts: true,
       },
       plugins: [react()],
       define: {
