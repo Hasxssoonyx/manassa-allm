@@ -56,6 +56,8 @@ export interface UserConfig {
   profileImage: string | null;
   darkMode: boolean;
   onboarded: boolean;
+  notificationsEnabled: boolean;
+  notificationMinutes: number;
 }
 
 export interface StudentHomework {

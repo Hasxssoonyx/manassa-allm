@@ -65,7 +65,8 @@ const App: React.FC = () => {
   const [studentLectures, setStudentLectures] = useState<StudentLecture[]>([]);
   const [studentHomeworks, setStudentHomeworks] = useState<StudentHomework[]>([]);
   const [config, setConfig] = useState<UserConfig>({
-    name: '', username: '', role: null, profileImage: null, darkMode: false, onboarded: false
+    name: '', username: '', role: null, profileImage: null, darkMode: false, onboarded: false,
+    notificationsEnabled: false, notificationMinutes: 15
   });
 
   const [authMode, setAuthMode] = useState<'selection' | 'login' | 'signup'>('selection');
@@ -195,6 +196,33 @@ const App: React.FC = () => {
     return () => unsub();
   }, []);
 
+  useEffect(() => {
+    if ('serviceWorker' in navigator && config.notificationsEnabled) {
+      Notification.requestPermission();
+    }
+  }, [config.notificationsEnabled]);
+
+  const scheduleNotifications = () => {
+    if (!('serviceWorker' in navigator) || !config.notificationsEnabled) return;
+    
+    const schedules = config.role === 'teacher' 
+      ? groups.flatMap(g => g.schedule.map(s => ({ ...s, groupName: g.name })))
+      : studentLectures.map(l => ({ day: l.day, time: l.time, groupName: l.subject }));
+
+    navigator.serviceWorker.ready.then(registration => {
+      registration.active?.postMessage({
+        type: 'SCHEDULE_NOTIFICATIONS',
+        schedules,
+        minutesBefore: config.notificationMinutes,
+        role: config.role
+      });
+    });
+  };
+
+  useEffect(() => {
+    scheduleNotifications();
+  }, [groups, studentLectures, config.notificationsEnabled, config.notificationMinutes]);
+
   const handleAuth = async () => {
     if (!authUsername || !authPassword) return showToast('يرجى ملء الحقول', 'error');
     // Constraint: Username length 4-12
@@ -207,7 +235,16 @@ const App: React.FC = () => {
       if (authMode === 'signup') {
         if (!authName) throw new Error("الاسم مطلوب");
         const cred = await createUserWithEmailAndPassword(auth, email, authPassword);
-        const userData = { name: authName, username: authUsername.trim().toLowerCase(), role: pendingRole, profileImage: null, darkMode: false, onboarded: true };
+        const userData = { 
+          name: authName, 
+          username: authUsername.trim().toLowerCase(), 
+          role: pendingRole, 
+          profileImage: null, 
+          darkMode: false, 
+          onboarded: true,
+          notificationsEnabled: false,
+          notificationMinutes: 15
+        };
         await setDoc(doc(db, "users", cred.user.uid), userData);
         setConfig(userData);
       } else {
@@ -910,7 +947,43 @@ const App: React.FC = () => {
             </button>
 
             {/* Point 8: Sign out with confirmation */}
-            <button onClick={handleSignOut} className="w-full p-5 bg-rose-50 text-rose-600 rounded-3xl flex justify-between items-center font-black mt-8 hover:bg-rose-100 transition-all">
+                <div className="pt-4 space-y-4 border-t border-slate-100 dark:border-slate-800">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className="p-2 bg-amber-50 dark:bg-amber-900/20 text-amber-600 rounded-xl">{ICONS.Bell}</div>
+                      <span className="font-bold text-slate-700 dark:text-slate-200">التنبيهات قبل المحاضرة</span>
+                    </div>
+                    <button 
+                      onClick={async () => {
+                        const newVal = !config.notificationsEnabled;
+                        setConfig(prev => ({ ...prev, notificationsEnabled: newVal }));
+                        if (auth.currentUser) await updateDoc(doc(db, "users", auth.currentUser.uid), { notificationsEnabled: newVal });
+                      }}
+                      className={`w-12 h-6 rounded-full transition-colors relative ${config.notificationsEnabled ? 'bg-indigo-600' : 'bg-slate-200 dark:bg-slate-700'}`}
+                    >
+                      <div className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-all ${config.notificationsEnabled ? 'left-7' : 'left-1'}`}></div>
+                    </button>
+                  </div>
+                  
+                  {config.notificationsEnabled && (
+                    <div className="flex items-center justify-between animate-fade-in">
+                      <span className="text-sm font-bold text-slate-500">وقت التنبيه (بالدقائق)</span>
+                      <select 
+                        value={config.notificationMinutes}
+                        onChange={async (e) => {
+                          const val = parseInt(e.target.value);
+                          setConfig(prev => ({ ...prev, notificationMinutes: val }));
+                          if (auth.currentUser) await updateDoc(doc(db, "users", auth.currentUser.uid), { notificationMinutes: val });
+                        }}
+                        className="bg-slate-50 dark:bg-slate-800 border-none rounded-xl px-3 py-1 font-bold text-indigo-600 text-sm focus:ring-2 ring-indigo-500"
+                      >
+                        {[5, 10, 15, 30, 45, 60].map(m => <option key={m} value={m}>{m} دقيقة</option>)}
+                      </select>
+                    </div>
+                  )}
+                </div>
+
+                <button onClick={handleSignOut} className="w-full p-5 bg-rose-50 text-rose-600 rounded-3xl flex justify-between items-center font-black mt-8 hover:bg-rose-100 transition-all">
                 <span>تسجيل الخروج</span>
                 {ICONS.LogOut}
             </button>
