@@ -11,7 +11,12 @@ const __dirname = path.dirname(__filename);
 export default defineConfig(({ mode }) => {
     const env = loadEnv(mode, '.', '');
     return {
-      base: './', // هذا السطر هو الأهم لضمان عمل التطبيق بعد تحويله لـ APK
+      base: './', 
+      build: {
+        outDir: 'dist',
+        assetsDir: 'assets',
+        emptyOutDir: true,
+      },
       server: {
         port: 5000,
         host: '0.0.0.0',
