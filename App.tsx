@@ -169,28 +169,63 @@ const App: React.FC = () => {
 
   // --- Auth & Firestore Sync ---
   useEffect(() => {
+    // Immediate load from cache for speed
+    const cachedConfig = localStorage.getItem('user_config');
+    if (cachedConfig) {
+      try {
+        const parsed = JSON.parse(cachedConfig);
+        setConfig(prev => ({ ...prev, ...parsed, onboarded: true }));
+        if (parsed.darkMode) document.documentElement.classList.add('dark');
+        
+        // Immediate load of groups from cache based on role
+        const groupsKey = parsed.role === 'teacher' ? `groups_${parsed.uid}` : `groups_student_${parsed.username}`;
+        const cachedGroups = localStorage.getItem(groupsKey);
+        if (cachedGroups) {
+          setGroups(JSON.parse(cachedGroups));
+          setView(parsed.role === 'teacher' ? 'dashboard' : 'schedule');
+        }
+      } catch (e) { console.error("Cache load error", e); }
+    }
+
     const unsub = onAuthStateChanged(auth, async (user) => {
       if (user) {
         const docRef = doc(db, "users", user.uid);
         const userDoc = await getDoc(docRef);
         if (userDoc.exists()) {
           const userData = userDoc.data() as UserConfig;
-          setConfig({ ...userData, onboarded: true });
+          const newConfig = { ...userData, onboarded: true, uid: user.uid };
+          setConfig(newConfig);
+          localStorage.setItem('user_config', JSON.stringify(newConfig));
+          
           if (userData.darkMode) document.documentElement.classList.add('dark');
+          else document.documentElement.classList.remove('dark');
           
           if (userData.role === 'teacher') {
             setView('dashboard');
             const qG = query(collection(db, "groups"), where("teacherUid", "==", user.uid));
-            onSnapshot(qG, snap => setGroups(snap.docs.map(d => ({ id: d.id, ...d.data() } as Group))));
+            onSnapshot(qG, snap => {
+              const gs = snap.docs.map(d => ({ id: d.id, ...d.data() } as Group));
+              setGroups(gs);
+              localStorage.setItem(`groups_${user.uid}`, JSON.stringify(gs));
+            });
           } else {
             setView('schedule');
             const qG = query(collection(db, "groups"), where("studentUsernames", "array-contains", userData.username.toLowerCase()));
-            onSnapshot(qG, snap => setGroups(snap.docs.map(d => ({ id: d.id, ...d.data() } as Group))));
+            onSnapshot(qG, snap => {
+              const gs = snap.docs.map(d => ({ id: d.id, ...d.data() } as Group));
+              setGroups(gs);
+              localStorage.setItem(`groups_student_${userData.username}`, JSON.stringify(gs));
+            });
           }
-        } else { await signOut(auth); setAuthMode('selection'); }
+        } else { 
+          await signOut(auth); 
+          setAuthMode('selection'); 
+          localStorage.removeItem('user_config'); 
+        }
       } else {
-        setConfig({ name: '', username: '', role: null, profileImage: null, darkMode: false, onboarded: false });
+        setConfig({ name: '', username: '', role: null, profileImage: null, darkMode: false, onboarded: false, notificationsEnabled: false, notificationMinutes: 15 });
         setAuthMode('selection');
+        localStorage.removeItem('user_config');
       }
     });
     return () => unsub();

@@ -37,9 +37,20 @@ self.addEventListener('activate', (event) => {
 
 self.addEventListener('fetch', (event) => {
   if (event.request.method !== 'GET') return;
+  
+  // استراتيجية الكاش أولاً للملفات الثابتة، والشبكة أولاً للباقي
   event.respondWith(
     caches.match(event.request).then((cachedResponse) => {
-      return cachedResponse || fetch(event.request);
+      if (cachedResponse) return cachedResponse;
+      
+      return fetch(event.request).then((response) => {
+        return response;
+      }).catch(() => {
+        // العودة لصفحة البداية عند انقطاع الانترنت
+        if (event.request.mode === 'navigate') {
+          return caches.match('./index.html');
+        }
+      });
     })
   );
 });
