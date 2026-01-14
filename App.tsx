@@ -78,7 +78,7 @@ const App: React.FC = () => {
   const [groupSearch, setGroupSearch] = useState('');
 
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
-  const [view, setView] = useState<'dashboard' | 'details' | 'schedule' | 'homework' | 'teacher-weekly' | 'student-results'>('dashboard');
+  const [view, setView] = useState<'dashboard' | 'details' | 'schedule' | 'homework' | 'teacher-weekly' | 'student-results' | 'exam-grading'>('dashboard');
   const [activeTab, setActiveTab] = useState<'students' | 'exams' | 'group-schedule'>('students');
   const [activeGroupId, setActiveGroupId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
@@ -136,6 +136,15 @@ const App: React.FC = () => {
 
   const showToast = (message: string, type: 'success' | 'error') => setToast({ message, type });
 
+  const examCounts = useMemo(() => {
+    if (!activeGroup) return { daily: 0, semester: 0 };
+    return activeGroup.exams.reduce((acc, ex) => {
+      if (ex.type === 'daily') acc.daily++;
+      else acc.semester++;
+      return acc;
+    }, { daily: 0, semester: 0 });
+  }, [activeGroup]);
+
   const getStudentStats = (studentId: string) => {
     const stats = { present: 0, absent: 0, excused: 0 };
     if (!activeGroup) return stats;
@@ -150,7 +159,71 @@ const App: React.FC = () => {
     return stats;
   };
 
-  // --- Persistence for Personal Student Tasks ---
+      {/* Exam Grading View */}
+      {view === 'exam-grading' && selectedExam && activeGroup && (
+        <div className="min-h-screen bg-white dark:bg-slate-950 animate-slide-in p-6 pb-24">
+          <div className="max-w-4xl mx-auto">
+            <div className="flex items-center justify-between mb-8">
+              <button onClick={() => setView('details')} className="p-3 bg-slate-100 dark:bg-slate-800 rounded-2xl dark:text-white">
+                {ICONS.ArrowRight}
+              </button>
+              <h2 className="text-2xl font-black dark:text-white">{selectedExam.title}</h2>
+              <div className="px-4 py-1.5 bg-indigo-50 dark:bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 rounded-full text-[10px] font-black uppercase tracking-widest ltr">
+                Max: {selectedExam.maxGrade}
+              </div>
+            </div>
+
+            <div className="space-y-4">
+              {activeGroup.students.map(s => {
+                const res = selectedExam.results[s.id] || { grade: 0, status: 'present' };
+                return (
+                  <div key={s.id} className="bg-slate-50 dark:bg-slate-900/50 p-5 rounded-[2rem] border border-slate-100 dark:border-slate-800">
+                    <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                      <div className="flex items-center gap-4">
+                        <div className="w-12 h-12 bg-white dark:bg-slate-800 rounded-xl flex items-center justify-center font-black dark:text-white border border-slate-100 dark:border-slate-700">
+                          {s.name[0]}
+                        </div>
+                        <div>
+                          <h4 className="font-black dark:text-white">{s.name}</h4>
+                          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">@{s.username}</p>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-3">
+                        <div className="flex bg-white dark:bg-slate-800 p-1.5 rounded-2xl border border-slate-100 dark:border-slate-700">
+                          {(['present', 'absent', 'excused'] as const).map(status => (
+                            <button
+                              key={status}
+                              onClick={() => updateGrade(selectedExam.id, s.id, res.grade, status)}
+                              className={`px-4 py-2 rounded-xl text-[10px] font-black transition-all ${
+                                res.status === status 
+                                  ? (status === 'present' ? 'bg-emerald-600 text-white shadow-lg' : status === 'absent' ? 'bg-rose-600 text-white shadow-lg' : 'bg-amber-500 text-white shadow-lg')
+                                  : 'text-slate-400 hover:text-slate-600'
+                              }`}
+                            >
+                              {status === 'present' ? 'حاضر' : status === 'absent' ? 'غائب' : 'مجاز'}
+                            </button>
+                          ))}
+                        </div>
+                        {res.status === 'present' && (
+                          <input
+                            type="number"
+                            value={res.grade}
+                            onChange={(e) => updateGrade(selectedExam.id, s.id, parseInt(e.target.value) || 0, res.status)}
+                            className="w-20 py-3 bg-white dark:bg-slate-800 border-2 border-slate-100 dark:border-slate-700 rounded-2xl text-center font-black dark:text-white focus:border-indigo-500 transition-colors"
+                          />
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
+
+  {/* --- Persistence for Personal Student Tasks --- */}
   useEffect(() => {
     if (config.role === 'student' && config.username) {
       const savedLectures = localStorage.getItem(`lectures_${config.username}`);

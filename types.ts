@@ -15,7 +15,7 @@ export interface Student {
 export interface ExamResult {
   studentId: string;
   grade: number;
-  status: 'present' | 'absent' | 'excused';
+  status: 'present' | 'absent' | 'excused'; // 'excused' already exists but let's ensure it's used
   notified?: boolean;
 }
 
