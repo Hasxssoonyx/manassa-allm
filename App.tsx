@@ -891,7 +891,7 @@ const App: React.FC = () => {
       <Modal isOpen={isGroupModalOpen} onClose={() => setIsGroupModalOpen(false)} title="إنشاء مجموعة جديدة">
          <div className="space-y-4">
             <input type="text" placeholder="اسم المجموعة" className="field" value={newGroupName} onChange={e => setNewGroupName(e.target.value)} />
-            <input type="text" placeholder="الموقع / السنتر" className="field" value={newGroupLocation} onChange={e => setNewGroupLocation(e.target.value)} />
+            <input type="text" placeholder="الموقع : العمارة - عواشة" className="field" value={newGroupLocation} onChange={e => setNewGroupLocation(e.target.value)} />
             <button onClick={handleAddGroup} className="w-full py-5 bg-indigo-600 text-white rounded-[2rem] font-black shadow-lg">حفظ</button>
          </div>
       </Modal>
