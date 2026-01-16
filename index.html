@@ -70,16 +70,17 @@
     </script>
   <link rel="stylesheet" href="/index.css">
 </head>
-  <body>
+ <body>
     <div id="root"></div>
-    <script type="module" src="./index.tsx"></script>
-    <script>
+    <script type="module" src="/index.tsx"></script> <script>
       if ('serviceWorker' in navigator) {
         window.addEventListener('load', () => {
-          navigator.serviceWorker.register('./sw.js').catch(err => console.log('SW Fail', err));
+          // تأكد أن المسار هو /sw.js لضمان عمله في كل الصفحات
+          navigator.serviceWorker.register('/sw.js') 
+            .then(reg => console.log('SW Registered!'))
+            .catch(err => console.log('SW Fail', err));
         });
       }
     </script>
-  <script type="module" src="/index.tsx"></script>
 </body>
 </html>
